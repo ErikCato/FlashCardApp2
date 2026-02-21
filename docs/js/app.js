@@ -5,6 +5,7 @@ import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
 import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
 import { initSelectionController, setDecks, getSelection, restoreLastSelection, updateSelectionUI } from "./controllers/selectionController.js";
+import { initFlashcardsController, startSession as startFlashcardsSession } from "./controllers/flashcardsController.js";
 
 // Flip this to switch between mock and API mode:
 const USE_MOCK_DATA = false;
@@ -20,13 +21,6 @@ let currentState = State.SELECTION;
 let provider = null;
 let decks = [];
 let deckMap = new Map();
-
-let session = {
-  cards: [],
-  order: [],
-  index: 0,
-  reveal: false,
-};
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
@@ -71,72 +65,6 @@ function showConfigModal() {
   openConfigModal();
 }
 
-function shuffleArray(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-}
-
-function buildOrder(n, shuffle) {
-  const arr = Array.from({ length: n }, (_, i) => i);
-  if (shuffle) shuffleArray(arr);
-  return arr;
-}
-
-function currentCard() {
-  if (!session.cards.length) return null;
-  return session.cards[session.order[session.index]];
-}
-
-function renderFlashcard() {
-  const c = currentCard();
-  if (!c) {
-    setError("flashcardsError", t('noCardsLoaded'));
-    setText("fcQuestion", "—");
-    setText("fcAnswer", "—");
-    setText("fcPos", "—");
-    setText("fcTags", "—");
-    return;
-  }
-
-  setError("flashcardsError", "");
-
-  const selection = getSelection();
-  const deck = deckMap.get(selection.deckId);
-  const area = (deck?.areas || []).find(a => a.id === selection.areaId);
-  const areaText = area?.name || selection.areaId;
-  setText("fcSubtitle", `${deck?.title || selection.deckId} • ${areaText}`);
-
-  setText("fcQuestion", c.question || "");
-  setText("fcAnswer", c.answer || "");
-  setText("fcPos", `${session.index + 1} / ${session.cards.length}`);
-
-  const tags = (c.tags || "").trim();
-  setText("fcTags", tags ? tags : t('noTags'));
-
-  // Flip the card when revealing answer so it replaces the question.
-  const flip = el("flipCard");
-  if (flip) {
-    if (session.reveal) flip.classList.add("flipped"); else flip.classList.remove("flipped");
-  }
-  el("btnReveal").textContent = session.reveal ? t('hideAnswer') : t('revealAnswer');
-}
-
-function nextCard() {
-  if (!session.cards.length) return;
-  session.index = (session.index + 1) % session.cards.length;
-  session.reveal = false;
-  renderFlashcard();
-}
-
-function prevCard() {
-  if (!session.cards.length) return;
-  session.index = (session.index - 1 + session.cards.length) % session.cards.length;
-  session.reveal = false;
-  renderFlashcard();
-}
-
 async function startPractice() {
   const selection = getSelection();
   try {
@@ -150,13 +78,18 @@ async function startPractice() {
       return;
     }
 
-    session.cards = cards;
-    session.order = buildOrder(cards.length, selection.shuffle);
-    session.index = 0;
-    session.reveal = false;
+    const deck = deckMap.get(selection.deckId);
+    const area = (deck?.areas || []).find((a) => a.id === selection.areaId);
 
     setState(State.FLASHCARDS);
-    renderFlashcard();
+    startFlashcardsSession({
+      deckTitle: deck?.title || selection.deckId,
+      deckId: selection.deckId,
+      areaId: selection.areaId,
+      areaName: area?.name || selection.areaId,
+      cards,
+      shuffle: selection.shuffle,
+    });
   } catch (e) {
     setError("selectionError", e?.message || String(e));
   }
@@ -221,6 +154,10 @@ async function init() {
     onStartPractice: startPractice,
   });
 
+  initFlashcardsController({
+    onBackToSelection: () => setState(State.SELECTION),
+  });
+
   // Wire top settings button
   el("btnTopSettings").addEventListener("click", showConfigModal);
 
@@ -241,19 +178,6 @@ async function init() {
   applyLocale();
   // Expose for debugging so you can re-run localization from DevTools
   try { window.applyLocale = applyLocale; } catch(e) {}
-
-  // Flashcards controls
-  el("btnReveal").addEventListener("click", () => {
-    session.reveal = !session.reveal;
-    renderFlashcard();
-  });
-
-  el("btnNext").addEventListener("click", nextCard);
-  el("btnPrev").addEventListener("click", prevCard);
-
-  el("btnBackToSelection").addEventListener("click", () => {
-    setState(State.SELECTION);
-  });
 
   // Initialize provider
   loadProvider();
