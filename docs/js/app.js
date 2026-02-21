@@ -107,7 +107,10 @@ function populateSheetSelect() {
   const optionsHead = '<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>';
   const sheetOptions = sheets.map(s => {
     if (typeof s === 'string') {
-      return `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`;
+      const [idPart, ...titleParts] = s.split('|');
+      const id = String(idPart || '').trim();
+      const label = String((titleParts.length ? titleParts.join('|') : id) || id).trim();
+      return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
     }
     const val = String(s.id || s.sheet || '');
     const label = String(s.title || val);

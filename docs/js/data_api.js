@@ -24,6 +24,26 @@ async function apiGet(cfg, params) {
   return js;
 }
 
+function normalizeSheetEntry(entry) {
+  if (entry && typeof entry === "object") {
+    const id = String(entry.id || entry.sheet || "").trim();
+    const title = String(entry.title || id).trim();
+    return { id, title };
+  }
+
+  const raw = String(entry || "").trim();
+  if (!raw) return { id: "", title: "" };
+
+  if (raw.includes("|")) {
+    const [idPart, ...titleParts] = raw.split("|");
+    const id = String(idPart || "").trim();
+    const title = String(titleParts.join("|") || id).trim();
+    return { id, title };
+  }
+
+  return { id: raw, title: raw };
+}
+
 export function apiProvider(cfg) {
   return {
     async getDecks() {
@@ -32,7 +52,9 @@ export function apiProvider(cfg) {
       return (js.decks || []).map(d => ({
         deckId: d.deckId,
         title: d.title || d.deckId,
-        sheets: d.sheets || [],
+        sheets: (d.sheets || [])
+          .map(normalizeSheetEntry)
+          .filter(s => s.id),
       }));
     },
 
