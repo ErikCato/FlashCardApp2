@@ -1,9 +1,10 @@
-import { el, show, hide, setText, setError, setDisabled, escapeHtml } from "./ui.js";
+import { el, show, hide, setText, setError } from "./ui.js";
 import { t, locales, setLocale, getLocale } from "./i18n.js";
-import { getConfig, setConfig, hasConfig, getLastSelection, setLastSelection, setCardGrade } from "./storage.js";
+import { getConfig, setConfig, hasConfig, setCardGrade } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
 import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
+import { initSelectionController, setDecks, getSelection, restoreLastSelection, updateSelectionUI } from "./controllers/selectionController.js";
 
 // Flip this to switch between mock and API mode:
 const USE_MOCK_DATA = false;
@@ -20,23 +21,12 @@ let provider = null;
 let decks = [];
 let deckMap = new Map();
 
-let selection = {
-  deckId: "",
-  areaId: "",
-  shuffle: true,
-};
-
 let session = {
   cards: [],
   order: [],
   index: 0,
   reveal: false,
 };
-
-let selectedAreaQuestionCount = null;
-let selectedAreaQuestionCountLoading = false;
-let selectedAreaCountRequestId = 0;
-let startPracticeLoading = false;
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
@@ -72,110 +62,7 @@ function loadProvider() {
 async function loadDecks() {
   decks = await provider.getDecks();
   deckMap = new Map(decks.map(d => [d.deckId, d]));
-  populateDeckSelect();
-}
-
-function populateDeckSelect() {
-  const sel = el("deckSelect");
-  if (!sel) return;
-  const options = ['<option value="" selected disabled>' + escapeHtml(t('selectSubject')) + '</option>']
-    .concat(decks.map(d => `<option value="${escapeHtml(d.deckId)}">${escapeHtml(d.title)}</option>`));
-  sel.innerHTML = options.join("");
-  // Restore last selection if possible
-  const last = getLastSelection();
-  if (last.deckId && deckMap.has(last.deckId)) {
-    sel.value = last.deckId;
-    selection.deckId = last.deckId;
-    populateSheetSelect();
-  }
-}
-
-function populateSheetSelect() {
-  const sheetSel = el("sheetSelect");
-  const deckSel = el("deckSelect");
-  if (!sheetSel || !deckSel) return;
-
-  const deckId = deckSel.value || "";
-  selection.deckId = deckId;
-
-  const deck = deckMap.get(deckId);
-  const areas = deck?.areas || [];
-
-  const optionsHead = '<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>';
-  const sheetOptions = areas.map(area => {
-    const val = String(area.id || '');
-    const label = String(area.name || val);
-    return `<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`;
-  });
-  sheetSel.innerHTML = [optionsHead].concat(sheetOptions).join('');
-
-  sheetSel.disabled = areas.length === 0;
-
-  const last = getLastSelection();
-  const values = areas.map(a => String(a.id || ''));
-  const lastAreaId = String(last.areaId || last.sheet || '').trim();
-  if (lastAreaId && values.includes(lastAreaId)) {
-    sheetSel.value = lastAreaId;
-    selection.areaId = lastAreaId;
-  } else {
-    selection.areaId = "";
-  }
-
-  refreshSelectedAreaQuestionCount();
-}
-
-async function refreshSelectedAreaQuestionCount() {
-  const deckId = selection.deckId;
-  const areaId = selection.areaId;
-  const requestId = ++selectedAreaCountRequestId;
-
-  if (!deckId || !areaId) {
-    selectedAreaQuestionCount = null;
-    selectedAreaQuestionCountLoading = false;
-    updateSelectionUi();
-    return;
-  }
-
-  selectedAreaQuestionCount = null;
-  selectedAreaQuestionCountLoading = true;
-  updateSelectionUi();
-
-  try {
-    const cards = await provider.getCards(deckId, areaId, true);
-    if (requestId !== selectedAreaCountRequestId) return;
-    selectedAreaQuestionCount = Array.isArray(cards) ? cards.length : 0;
-  } catch {
-    if (requestId !== selectedAreaCountRequestId) return;
-    selectedAreaQuestionCount = null;
-  } finally {
-    if (requestId !== selectedAreaCountRequestId) return;
-    selectedAreaQuestionCountLoading = false;
-    updateSelectionUi();
-  }
-}
-
-function updateSelectionUi() {
-  const deckId = selection.deckId;
-  const areaId = selection.areaId;
-  const hasAreaCount = typeof selectedAreaQuestionCount === "number";
-
-  setText("startPracticeBtn", startPracticeLoading ? t('startingPractice') : t('startPractice'));
-
-  if (!deckId || !areaId) {
-    setText("availableCount", t('selectSubjectAndArea'));
-  } else if (selectedAreaQuestionCountLoading) {
-    setText("availableCount", t('countingQuestions'));
-  } else if (hasAreaCount) {
-    setText("availableCount", `${t('questionsInArea')}: ${selectedAreaQuestionCount} • ${t('readyToLoad')}`);
-  } else {
-    setText("availableCount", t('readyToLoad'));
-  }
-
-  const canStart = Boolean(deckId && areaId) && !selectedAreaQuestionCountLoading && hasAreaCount && !startPracticeLoading;
-  setDisabled("startPracticeBtn", !canStart);
-
-  // Clear selection screen error
-  setError("selectionError", "");
+  setDecks(decks);
 }
 
 function showConfigModal() {
@@ -215,6 +102,7 @@ function renderFlashcard() {
 
   setError("flashcardsError", "");
 
+  const selection = getSelection();
   const deck = deckMap.get(selection.deckId);
   const area = (deck?.areas || []).find(a => a.id === selection.areaId);
   const areaText = area?.name || selection.areaId;
@@ -250,14 +138,9 @@ function prevCard() {
 }
 
 async function startPractice() {
-  if (startPracticeLoading) return;
+  const selection = getSelection();
   try {
-    startPracticeLoading = true;
-    updateSelectionUi();
     setError("selectionError", "");
-
-    // Persist selection
-    setLastSelection(selection);
 
     // Load cards
     const cards = await provider.getCards(selection.deckId, selection.areaId, true);
@@ -276,9 +159,6 @@ async function startPractice() {
     renderFlashcard();
   } catch (e) {
     setError("selectionError", e?.message || String(e));
-  } finally {
-    startPracticeLoading = false;
-    updateSelectionUi();
   }
 }
 
@@ -315,6 +195,7 @@ function applyLocale() {
   // Top bar tooltip/title
   el('btnTopSettings').title = t('apiSettings');
   el('btnTopSettings').setAttribute('aria-label', t('apiSettings'));
+  updateSelectionUI();
   updateConfigControllerUi();
 }
 
@@ -332,6 +213,12 @@ async function init() {
       loadProvider();
       await loadDecks();
     },
+  });
+
+  initSelectionController({
+    provider: () => provider,
+    onOpenSettings: showConfigModal,
+    onStartPractice: startPractice,
   });
 
   // Wire top settings button
@@ -355,25 +242,6 @@ async function init() {
   // Expose for debugging so you can re-run localization from DevTools
   try { window.applyLocale = applyLocale; } catch(e) {}
 
-  // Selection screen controls
-  el("openSettingsBtn").addEventListener("click", showConfigModal);
-
-  el("deckSelect").addEventListener("change", () => {
-    populateSheetSelect();
-  });
-
-  el("sheetSelect").addEventListener("change", () => {
-    selection.areaId = el("sheetSelect").value || "";
-    refreshSelectedAreaQuestionCount();
-  });
-
-  el("shuffleToggle").addEventListener("change", () => {
-    selection.shuffle = Boolean(el("shuffleToggle").checked);
-    setLastSelection(selection);
-  });
-
-  el("startPracticeBtn").addEventListener("click", startPractice);
-
   // Flashcards controls
   el("btnReveal").addEventListener("click", () => {
     session.reveal = !session.reveal;
@@ -387,11 +255,6 @@ async function init() {
     setState(State.SELECTION);
   });
 
-  // Load last selection defaults
-  const last = getLastSelection();
-  selection.shuffle = last.shuffle !== false;
-  el("shuffleToggle").checked = selection.shuffle;
-
   // Initialize provider
   loadProvider();
 
@@ -403,6 +266,7 @@ async function init() {
   // Load decks (mock or API)
   try {
     await loadDecks();
+    restoreLastSelection();
   } catch (e) {
     // If API mode failed, prompt settings
     if (!USE_MOCK_DATA) {
@@ -413,19 +277,7 @@ async function init() {
     }
   }
 
-  // Restore last sheet if possible
-  const deckSel = el("deckSelect");
-  if (last.deckId && deckSel && deckSel.value === last.deckId) {
-    populateSheetSelect();
-    const sheetSel = el("sheetSelect");
-    const lastAreaId = String(last.areaId || last.sheet || '').trim();
-    if (sheetSel && lastAreaId) {
-      sheetSel.value = lastAreaId;
-      selection.areaId = lastAreaId;
-    }
-  }
-
-  updateSelectionUi();
+  updateSelectionUI();
   setState(State.SELECTION);
 }
 
