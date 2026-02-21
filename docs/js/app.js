@@ -32,6 +32,19 @@ let session = {
   reveal: false,
 };
 
+let selectedAreaQuestionCount = null;
+let selectedAreaQuestionCountLoading = false;
+let selectedAreaCountRequestId = 0;
+let startPracticeLoading = false;
+
+function toSheetId(sheetEntry) {
+  if (typeof sheetEntry === "string") {
+    const [idPart] = sheetEntry.split("|");
+    return String(idPart || "").trim();
+  }
+  return String(sheetEntry?.id || sheetEntry?.sheet || "").trim();
+}
+
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -121,7 +134,7 @@ function populateSheetSelect() {
   sheetSel.disabled = sheets.length === 0;
 
   const last = getLastSelection();
-  const values = sheets.map(s => (typeof s === 'string') ? s : String(s.id || s.sheet || ''));
+  const values = sheets.map(s => toSheetId(s));
   if (last.sheet && values.includes(last.sheet)) {
     sheetSel.value = last.sheet;
     selection.sheet = last.sheet;
@@ -129,16 +142,57 @@ function populateSheetSelect() {
     selection.sheet = "";
   }
 
+  refreshSelectedAreaQuestionCount();
+}
+
+async function refreshSelectedAreaQuestionCount() {
+  const deckId = selection.deckId;
+  const sheetId = selection.sheet;
+  const requestId = ++selectedAreaCountRequestId;
+
+  if (!deckId || !sheetId) {
+    selectedAreaQuestionCount = null;
+    selectedAreaQuestionCountLoading = false;
+    updateSelectionUi();
+    return;
+  }
+
+  selectedAreaQuestionCount = null;
+  selectedAreaQuestionCountLoading = true;
   updateSelectionUi();
+
+  try {
+    const cards = await provider.getCards(deckId, sheetId, true);
+    if (requestId !== selectedAreaCountRequestId) return;
+    selectedAreaQuestionCount = Array.isArray(cards) ? cards.length : 0;
+  } catch {
+    if (requestId !== selectedAreaCountRequestId) return;
+    selectedAreaQuestionCount = null;
+  } finally {
+    if (requestId !== selectedAreaCountRequestId) return;
+    selectedAreaQuestionCountLoading = false;
+    updateSelectionUi();
+  }
 }
 
 function updateSelectionUi() {
   const deckId = selection.deckId;
   const sheet = selection.sheet;
+  const hasAreaCount = typeof selectedAreaQuestionCount === "number";
 
-  setText("availableCount", (deckId && sheet) ? t('readyToLoad') : t('selectSubjectAndArea'));
+  setText("startPracticeBtn", startPracticeLoading ? t('startingPractice') : t('startPractice'));
 
-  const canStart = Boolean(deckId && sheet);
+  if (!deckId || !sheet) {
+    setText("availableCount", t('selectSubjectAndArea'));
+  } else if (selectedAreaQuestionCountLoading) {
+    setText("availableCount", t('countingQuestions'));
+  } else if (hasAreaCount) {
+    setText("availableCount", `${t('questionsInArea')}: ${selectedAreaQuestionCount} • ${t('readyToLoad')}`);
+  } else {
+    setText("availableCount", t('readyToLoad'));
+  }
+
+  const canStart = Boolean(deckId && sheet) && !selectedAreaQuestionCountLoading && hasAreaCount && !startPracticeLoading;
   setDisabled("startPracticeBtn", !canStart);
 
   // Clear selection screen error
@@ -209,7 +263,10 @@ function prevCard() {
 }
 
 async function startPractice() {
+  if (startPracticeLoading) return;
   try {
+    startPracticeLoading = true;
+    updateSelectionUi();
     setError("selectionError", "");
 
     // Persist selection
@@ -232,6 +289,9 @@ async function startPractice() {
     renderFlashcard();
   } catch (e) {
     setError("selectionError", e?.message || String(e));
+  } finally {
+    startPracticeLoading = false;
+    updateSelectionUi();
   }
 }
 
@@ -354,7 +414,7 @@ async function init() {
 
   el("sheetSelect").addEventListener("change", () => {
     selection.sheet = el("sheetSelect").value || "";
-    updateSelectionUi();
+    refreshSelectedAreaQuestionCount();
   });
 
   el("shuffleToggle").addEventListener("change", () => {
