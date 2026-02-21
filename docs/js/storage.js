@@ -35,9 +35,11 @@ export function getLastSelection() {
 }
 
 export function setLastSelection(sel) {
+  const areaId = String(sel.areaId || sel.sheet || "").trim();
   localStorage.setItem(LS_LAST, JSON.stringify({
     deckId: sel.deckId || "",
-    sheet: sel.sheet || "",
+    areaId,
+    sheet: areaId,
     shuffle: sel.shuffle !== false,
   }));
 }
@@ -54,9 +56,9 @@ export function setProgress(p) {
   localStorage.setItem(LS_PROGRESS, JSON.stringify(p || {}));
 }
 
-export function setCardGrade(deckId, sheet, cardId, grade) {
+export function setCardGrade(deckId, areaId, cardId, grade) {
   const p = getProgress();
-  const k = `${deckId}::${sheet}`;
+  const k = `${deckId}::${areaId}`;
   p[k] = p[k] || {};
   p[k][cardId] = { grade, ts: Date.now() };
   setProgress(p);

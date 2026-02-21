@@ -48,11 +48,11 @@ export function apiProvider(cfg) {
   return {
     async getDecks() {
       const js = await apiGet(cfg, { path: "decks" });
-      // expects: {decks:[{deckId,title,spreadsheetId,sheets:[...] }]}
+      // supports: {decks:[{deckId,title,areas:[...]}]} or legacy sheets
       return (js.decks || []).map(d => ({
         deckId: d.deckId,
         title: d.title || d.deckId,
-        sheets: (d.sheets || [])
+        areas: (Array.isArray(d.areas) ? d.areas : (d.sheets || []))
           .map(normalizeSheetEntry)
           .filter(s => s.id),
       }));

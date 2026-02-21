@@ -21,7 +21,7 @@ let deckMap = new Map();
 
 let selection = {
   deckId: "",
-  sheet: "",
+  areaId: "",
   shuffle: true,
 };
 
@@ -38,12 +38,30 @@ let selectedAreaCountRequestId = 0;
 let startPracticeLoading = false;
 let configSaveLoading = false;
 
-function toSheetId(sheetEntry) {
-  if (typeof sheetEntry === "string") {
-    const [idPart] = sheetEntry.split("|");
-    return String(idPart || "").trim();
+function normalizeAreaEntry(entry) {
+  if (entry && typeof entry === "object") {
+    const id = String(entry.id || entry.sheet || "").trim();
+    const name = String(entry.name || entry.title || id).trim();
+    return { id, name };
   }
-  return String(sheetEntry?.id || sheetEntry?.sheet || "").trim();
+
+  const raw = String(entry || "").trim();
+  if (!raw) return { id: "", name: "" };
+
+  if (raw.includes("|")) {
+    const [idPart, ...nameParts] = raw.split("|");
+    const id = String(idPart || "").trim();
+    const name = String(nameParts.join("|") || id).trim();
+    return { id, name };
+  }
+
+  return { id: raw, name: raw };
+}
+
+function normalizeDeck(deck) {
+  const sourceAreas = Array.isArray(deck?.areas) ? deck.areas : (deck?.sheets || []);
+  const areas = sourceAreas.map(normalizeAreaEntry).filter(a => a.id);
+  return { ...deck, areas };
 }
 
 function registerServiceWorker() {
@@ -78,7 +96,7 @@ function loadProvider() {
 }
 
 async function loadDecks() {
-  decks = await provider.getDecks();
+  decks = (await provider.getDecks()).map(normalizeDeck);
   deckMap = new Map(decks.map(d => [d.deckId, d]));
   populateDeckSelect();
 }
@@ -107,31 +125,26 @@ function populateSheetSelect() {
   selection.deckId = deckId;
 
   const deck = deckMap.get(deckId);
-  const sheets = deck?.sheets || [];
+  const areas = deck?.areas || [];
 
   const optionsHead = '<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>';
-  const sheetOptions = sheets.map(s => {
-    if (typeof s === 'string') {
-      const [idPart, ...titleParts] = s.split('|');
-      const id = String(idPart || '').trim();
-      const label = String((titleParts.length ? titleParts.join('|') : id) || id).trim();
-      return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
-    }
-    const val = String(s.id || s.sheet || '');
-    const label = String(s.title || val);
+  const sheetOptions = areas.map(area => {
+    const val = String(area.id || '');
+    const label = String(area.name || val);
     return `<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`;
   });
   sheetSel.innerHTML = [optionsHead].concat(sheetOptions).join('');
 
-  sheetSel.disabled = sheets.length === 0;
+  sheetSel.disabled = areas.length === 0;
 
   const last = getLastSelection();
-  const values = sheets.map(s => toSheetId(s));
-  if (last.sheet && values.includes(last.sheet)) {
-    sheetSel.value = last.sheet;
-    selection.sheet = last.sheet;
+  const values = areas.map(a => String(a.id || ''));
+  const lastAreaId = String(last.areaId || last.sheet || '').trim();
+  if (lastAreaId && values.includes(lastAreaId)) {
+    sheetSel.value = lastAreaId;
+    selection.areaId = lastAreaId;
   } else {
-    selection.sheet = "";
+    selection.areaId = "";
   }
 
   refreshSelectedAreaQuestionCount();
@@ -139,10 +152,10 @@ function populateSheetSelect() {
 
 async function refreshSelectedAreaQuestionCount() {
   const deckId = selection.deckId;
-  const sheetId = selection.sheet;
+  const areaId = selection.areaId;
   const requestId = ++selectedAreaCountRequestId;
 
-  if (!deckId || !sheetId) {
+  if (!deckId || !areaId) {
     selectedAreaQuestionCount = null;
     selectedAreaQuestionCountLoading = false;
     updateSelectionUi();
@@ -154,7 +167,7 @@ async function refreshSelectedAreaQuestionCount() {
   updateSelectionUi();
 
   try {
-    const cards = await provider.getCards(deckId, sheetId, true);
+    const cards = await provider.getCards(deckId, areaId, true);
     if (requestId !== selectedAreaCountRequestId) return;
     selectedAreaQuestionCount = Array.isArray(cards) ? cards.length : 0;
   } catch {
@@ -169,12 +182,12 @@ async function refreshSelectedAreaQuestionCount() {
 
 function updateSelectionUi() {
   const deckId = selection.deckId;
-  const sheet = selection.sheet;
+  const areaId = selection.areaId;
   const hasAreaCount = typeof selectedAreaQuestionCount === "number";
 
   setText("startPracticeBtn", startPracticeLoading ? t('startingPractice') : t('startPractice'));
 
-  if (!deckId || !sheet) {
+  if (!deckId || !areaId) {
     setText("availableCount", t('selectSubjectAndArea'));
   } else if (selectedAreaQuestionCountLoading) {
     setText("availableCount", t('countingQuestions'));
@@ -184,7 +197,7 @@ function updateSelectionUi() {
     setText("availableCount", t('readyToLoad'));
   }
 
-  const canStart = Boolean(deckId && sheet) && !selectedAreaQuestionCountLoading && hasAreaCount && !startPracticeLoading;
+  const canStart = Boolean(deckId && areaId) && !selectedAreaQuestionCountLoading && hasAreaCount && !startPracticeLoading;
   setDisabled("startPracticeBtn", !canStart);
 
   // Clear selection screen error
@@ -223,7 +236,9 @@ function renderFlashcard() {
   setError("flashcardsError", "");
 
   const deck = deckMap.get(selection.deckId);
-  setText("fcSubtitle", `${deck?.title || selection.deckId} • ${selection.sheet}`);
+  const area = (deck?.areas || []).find(a => a.id === selection.areaId);
+  const areaText = area?.name || selection.areaId;
+  setText("fcSubtitle", `${deck?.title || selection.deckId} • ${areaText}`);
 
   setText("fcQuestion", c.question || "");
   setText("fcAnswer", c.answer || "");
@@ -265,7 +280,7 @@ async function startPractice() {
     setLastSelection(selection);
 
     // Load cards
-    const cards = await provider.getCards(selection.deckId, selection.sheet, true);
+    const cards = await provider.getCards(selection.deckId, selection.areaId, true);
 
     if (!cards.length) {
       setError("selectionError", t('noCardsFoundArea'));
@@ -428,7 +443,7 @@ async function init() {
   });
 
   el("sheetSelect").addEventListener("change", () => {
-    selection.sheet = el("sheetSelect").value || "";
+    selection.areaId = el("sheetSelect").value || "";
     refreshSelectedAreaQuestionCount();
   });
 
@@ -497,9 +512,10 @@ async function init() {
   if (last.deckId && deckSel && deckSel.value === last.deckId) {
     populateSheetSelect();
     const sheetSel = el("sheetSelect");
-    if (sheetSel && last.sheet) {
-      sheetSel.value = last.sheet;
-      selection.sheet = last.sheet;
+    const lastAreaId = String(last.areaId || last.sheet || '').trim();
+    if (sheetSel && lastAreaId) {
+      sheetSel.value = lastAreaId;
+      selection.areaId = lastAreaId;
     }
   }
 
