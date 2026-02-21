@@ -1,8 +1,9 @@
-import { el, show, hide, setText, setError, setDisabled, openModal, closeModal, escapeHtml } from "./ui.js";
+import { el, show, hide, setText, setError, setDisabled, escapeHtml } from "./ui.js";
 import { t, locales, setLocale, getLocale } from "./i18n.js";
 import { getConfig, setConfig, hasConfig, getLastSelection, setLastSelection, setCardGrade } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
+import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
 
 // Flip this to switch between mock and API mode:
 const USE_MOCK_DATA = false;
@@ -36,7 +37,6 @@ let selectedAreaQuestionCount = null;
 let selectedAreaQuestionCountLoading = false;
 let selectedAreaCountRequestId = 0;
 let startPracticeLoading = false;
-let configSaveLoading = false;
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
@@ -178,6 +178,12 @@ function updateSelectionUi() {
   setError("selectionError", "");
 }
 
+function showConfigModal() {
+  setConfigToUI(getConfig());
+  applyLocale();
+  openConfigModal();
+}
+
 function shuffleArray(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -276,31 +282,6 @@ async function startPractice() {
   }
 }
 
-function openConfigModal(force) {
-  // If force is true, show even if config exists
-  const cfg = getConfig();
-  el("apiUrl").value = cfg.apiUrl || "";
-  el("apiKey").value = cfg.apiKey || "";
-  setError("cfgError", "");
-
-  openModal("configModal");
-
-  // Ensure modal strings reflect current locale when opened
-  applyLocale();
-  updateConfigSaveUi();
-
-  // In first-run, hide cancel to "force" config before use (optional)
-  // Here: if force is false and config missing, we keep Cancel hidden.
-  const cancelBtn = el("btnCfgCancel");
-  if (!cancelBtn) return;
-
-  if (!USE_MOCK_DATA && !hasConfig()) {
-    cancelBtn.classList.add("hidden");
-  } else {
-    cancelBtn.classList.remove("hidden");
-  }
-}
-
 function applyLocale() {
   // Set HTML lang attribute for accessibility
   try { document.documentElement.lang = getLocale(); } catch {}
@@ -334,62 +315,27 @@ function applyLocale() {
   // Top bar tooltip/title
   el('btnTopSettings').title = t('apiSettings');
   el('btnTopSettings').setAttribute('aria-label', t('apiSettings'));
-
-  updateConfigSaveUi();
-}
-
-function updateConfigSaveUi() {
-  const saveBtn = el("btnCfgSave");
-  const apiUrlEl = el("apiUrl");
-  const apiKeyEl = el("apiKey");
-  if (!saveBtn || !apiUrlEl || !apiKeyEl) return;
-
-  const hasUrl = Boolean(apiUrlEl.value.trim());
-  const hasKey = Boolean(apiKeyEl.value.trim());
-  const canSave = hasUrl && hasKey && !configSaveLoading;
-
-  setText("btnCfgSave", configSaveLoading ? t('savingConfig') : t('save'));
-  setDisabled("btnCfgSave", !canSave);
-}
-
-function closeConfigModal() {
-  closeModal("configModal");
-}
-
-async function saveConfigFromModal() {
-  if (configSaveLoading) return;
-  try {
-    configSaveLoading = true;
-    updateConfigSaveUi();
-    setError("cfgError", "");
-    const apiUrl = el("apiUrl").value.trim();
-    const apiKey = el("apiKey").value.trim();
-
-    if (!USE_MOCK_DATA) {
-      if (!apiUrl) throw new Error(t('enterApiUrl'));
-      if (!apiKey) throw new Error(t('enterApiKey'));
-    }
-
-    setConfig({ apiUrl, apiKey });
-
-    // Reload provider/decks (only matters in API mode)
-    loadProvider();
-    await loadDecks();
-
-    closeConfigModal();
-  } catch (e) {
-    setError("cfgError", e?.message || String(e));
-  } finally {
-    configSaveLoading = false;
-    updateConfigSaveUi();
-  }
+  updateConfigControllerUi();
 }
 
 async function init() {
   registerServiceWorker();
 
+  initConfigController({
+    requireConfig: () => (!USE_MOCK_DATA && !hasConfig()),
+    onConfigSaved: async ({ apiUrl, apiKey }) => {
+      if (!USE_MOCK_DATA) {
+        if (!apiUrl) throw new Error(t('enterApiUrl'));
+        if (!apiKey) throw new Error(t('enterApiKey'));
+      }
+      setConfig({ apiUrl, apiKey });
+      loadProvider();
+      await loadDecks();
+    },
+  });
+
   // Wire top settings button
-  el("btnTopSettings").addEventListener("click", () => openConfigModal(true));
+  el("btnTopSettings").addEventListener("click", showConfigModal);
 
   // Language selector
   const langSel = el('langSelect');
@@ -410,7 +356,7 @@ async function init() {
   try { window.applyLocale = applyLocale; } catch(e) {}
 
   // Selection screen controls
-  el("openSettingsBtn").addEventListener("click", () => openConfigModal(true));
+  el("openSettingsBtn").addEventListener("click", showConfigModal);
 
   el("deckSelect").addEventListener("change", () => {
     populateSheetSelect();
@@ -441,20 +387,6 @@ async function init() {
     setState(State.SELECTION);
   });
 
-  // Config modal controls
-  el("btnCfgSave").addEventListener("click", saveConfigFromModal);
-  el("btnCfgCancel").addEventListener("click", closeConfigModal);
-  el("apiUrl").addEventListener("input", updateConfigSaveUi);
-  el("apiKey").addEventListener("input", updateConfigSaveUi);
-
-  // Click on backdrop closes modal (when cancel is allowed)
-  document.querySelector("#configModal .modalBackdrop")
-    .addEventListener("click", () => {
-      // If config is required (API mode + missing), do not close
-      if (!USE_MOCK_DATA && !hasConfig()) return;
-      closeConfigModal();
-    });
-
   // Load last selection defaults
   const last = getLastSelection();
   selection.shuffle = last.shuffle !== false;
@@ -465,7 +397,7 @@ async function init() {
 
   // If API mode and config missing: force config modal first
   if (!USE_MOCK_DATA && !hasConfig()) {
-    openConfigModal(false);
+    showConfigModal();
   }
 
   // Load decks (mock or API)
@@ -474,7 +406,7 @@ async function init() {
   } catch (e) {
     // If API mode failed, prompt settings
     if (!USE_MOCK_DATA) {
-      openConfigModal(true);
+      showConfigModal();
       setError("cfgError", e?.message || String(e));
     } else {
       setError("selectionError", e?.message || String(e));
