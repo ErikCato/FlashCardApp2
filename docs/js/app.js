@@ -73,17 +73,8 @@ function loadProvider() {
     provider = mockProvider;
     return;
   }
-  const cfg = getConfig();
-  if (!cfg || !cfg.apiUrl) {
-    // Default to the deployed Apps Script endpoint if not configured
-    const defaultCfg = {
-      apiUrl: "https://script.google.com/macros/s/AKfycbzgWjYw9SJRh_zdkemLefOvt2d1CVFF0gOSGau-JaXDXMx4UGMYxZZQVxypbgqRNByLew/exec",
-      apiKey: "F3x7pQ9kL2mV8nR5tY1cZ6aH0jW4uS"
-    };
-    provider = apiProvider(defaultCfg);
-  } else {
-    provider = apiProvider(cfg);
-  }
+  const cfg = getConfig() || {};
+  provider = apiProvider(cfg);
 }
 
 async function loadDecks() {

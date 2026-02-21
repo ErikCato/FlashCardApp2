@@ -1,4 +1,4 @@
-const CACHE = "flashcards-cache-v2";
+const CACHE = "flashcards-cache-v3";
 
 const ASSETS = [
   "./",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./js/app.js",
   "./js/ui.js",
   "./js/storage.js",
+  "./js/i18n.js",
   "./js/data_mock.js",
   "./js/data_api.js",
   "./manifest.json"
