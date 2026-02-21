@@ -75,7 +75,6 @@ function populateDeckSelect() {
   const options = ['<option value="" selected disabled>' + escapeHtml(t('selectSubject')) + '</option>']
     .concat(decks.map(d => `<option value="${escapeHtml(d.deckId)}">${escapeHtml(d.title)}</option>`));
   sel.innerHTML = options.join("");
-
   // Restore last selection if possible
   const last = getLastSelection();
   if (last.deckId && deckMap.has(last.deckId)) {
@@ -96,14 +95,22 @@ function populateSheetSelect() {
   const deck = deckMap.get(deckId);
   const sheets = deck?.sheets || [];
 
-  sheetSel.innerHTML = ['<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>']
-    .concat(sheets.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`))
-    .join("");
+  const optionsHead = '<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>';
+  const sheetOptions = sheets.map(s => {
+    if (typeof s === 'string') {
+      return `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`;
+    }
+    const val = String(s.id || s.sheet || '');
+    const label = String(s.title || val);
+    return `<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`;
+  });
+  sheetSel.innerHTML = [optionsHead].concat(sheetOptions).join('');
 
   sheetSel.disabled = sheets.length === 0;
 
   const last = getLastSelection();
-  if (last.sheet && sheets.includes(last.sheet)) {
+  const values = sheets.map(s => (typeof s === 'string') ? s : String(s.id || s.sheet || ''));
+  if (last.sheet && values.includes(last.sheet)) {
     sheetSel.value = last.sheet;
     selection.sheet = last.sheet;
   } else {

@@ -1,7 +1,12 @@
 const MOCK = {
   decks: [
-    { deckId: "samh1b", title: "Samhällskunskap 1B", sheets: ["mr", "eu"] },
-    { deckId: "math", title: "Math", sheets: ["algebra"] },
+    { deckId: "samh1b", title: "Samhällskunskap 1B", sheets: [
+      { id: "mr", title: "Mänskliga rättigheter" },
+      { id: "eu", title: "Europeiska unionen" }
+    ] },
+    { deckId: "math", title: "Math", sheets: [
+      { id: "algebra", title: "Algebra" }
+    ] },
   ],
   cards: {
     "samh1b::mr": [
