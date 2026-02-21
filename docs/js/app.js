@@ -38,32 +38,6 @@ let selectedAreaCountRequestId = 0;
 let startPracticeLoading = false;
 let configSaveLoading = false;
 
-function normalizeAreaEntry(entry) {
-  if (entry && typeof entry === "object") {
-    const id = String(entry.id || entry.sheet || "").trim();
-    const name = String(entry.name || entry.title || id).trim();
-    return { id, name };
-  }
-
-  const raw = String(entry || "").trim();
-  if (!raw) return { id: "", name: "" };
-
-  if (raw.includes("|")) {
-    const [idPart, ...nameParts] = raw.split("|");
-    const id = String(idPart || "").trim();
-    const name = String(nameParts.join("|") || id).trim();
-    return { id, name };
-  }
-
-  return { id: raw, name: raw };
-}
-
-function normalizeDeck(deck) {
-  const sourceAreas = Array.isArray(deck?.areas) ? deck.areas : (deck?.sheets || []);
-  const areas = sourceAreas.map(normalizeAreaEntry).filter(a => a.id);
-  return { ...deck, areas };
-}
-
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -86,17 +60,17 @@ function render() {
   }
 }
 
+function createProvider(config, useMock) {
+  if (useMock) return mockProvider;
+  return apiProvider(config || {});
+}
+
 function loadProvider() {
-  if (USE_MOCK_DATA) {
-    provider = mockProvider;
-    return;
-  }
-  const cfg = getConfig() || {};
-  provider = apiProvider(cfg);
+  provider = createProvider(getConfig(), USE_MOCK_DATA);
 }
 
 async function loadDecks() {
-  decks = (await provider.getDecks()).map(normalizeDeck);
+  decks = await provider.getDecks();
   deckMap = new Map(decks.map(d => [d.deckId, d]));
   populateDeckSelect();
 }
