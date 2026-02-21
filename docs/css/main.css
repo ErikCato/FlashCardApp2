@@ -22,7 +22,11 @@
 
 *{ box-sizing: border-box; }
 
-html, body{ height: 100%; }
+html, body{ 
+  height: 100%; 
+  /* Use dynamic viewport height (dvh) so address bar doesn't push content off-screen */
+  height: 100dvh; 
+}
 
 body{
   margin:0;
