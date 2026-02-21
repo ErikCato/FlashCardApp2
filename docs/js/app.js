@@ -36,6 +36,7 @@ let selectedAreaQuestionCount = null;
 let selectedAreaQuestionCountLoading = false;
 let selectedAreaCountRequestId = 0;
 let startPracticeLoading = false;
+let configSaveLoading = false;
 
 function toSheetId(sheetEntry) {
   if (typeof sheetEntry === "string") {
@@ -306,6 +307,7 @@ function openConfigModal(force) {
 
   // Ensure modal strings reflect current locale when opened
   applyLocale();
+  updateConfigSaveUi();
 
   // In first-run, hide cancel to "force" config before use (optional)
   // Here: if force is false and config missing, we keep Cancel hidden.
@@ -352,6 +354,22 @@ function applyLocale() {
   // Top bar tooltip/title
   el('btnTopSettings').title = t('apiSettings');
   el('btnTopSettings').setAttribute('aria-label', t('apiSettings'));
+
+  updateConfigSaveUi();
+}
+
+function updateConfigSaveUi() {
+  const saveBtn = el("btnCfgSave");
+  const apiUrlEl = el("apiUrl");
+  const apiKeyEl = el("apiKey");
+  if (!saveBtn || !apiUrlEl || !apiKeyEl) return;
+
+  const hasUrl = Boolean(apiUrlEl.value.trim());
+  const hasKey = Boolean(apiKeyEl.value.trim());
+  const canSave = hasUrl && hasKey && !configSaveLoading;
+
+  setText("btnCfgSave", configSaveLoading ? t('savingConfig') : t('save'));
+  setDisabled("btnCfgSave", !canSave);
 }
 
 function closeConfigModal() {
@@ -359,7 +377,10 @@ function closeConfigModal() {
 }
 
 async function saveConfigFromModal() {
+  if (configSaveLoading) return;
   try {
+    configSaveLoading = true;
+    updateConfigSaveUi();
     setError("cfgError", "");
     const apiUrl = el("apiUrl").value.trim();
     const apiKey = el("apiKey").value.trim();
@@ -378,6 +399,9 @@ async function saveConfigFromModal() {
     closeConfigModal();
   } catch (e) {
     setError("cfgError", e?.message || String(e));
+  } finally {
+    configSaveLoading = false;
+    updateConfigSaveUi();
   }
 }
 
@@ -440,6 +464,8 @@ async function init() {
   // Config modal controls
   el("btnCfgSave").addEventListener("click", saveConfigFromModal);
   el("btnCfgCancel").addEventListener("click", closeConfigModal);
+  el("apiUrl").addEventListener("input", updateConfigSaveUi);
+  el("apiKey").addEventListener("input", updateConfigSaveUi);
 
   // Click on backdrop closes modal (when cancel is allowed)
   document.querySelector("#configModal .modalBackdrop")
