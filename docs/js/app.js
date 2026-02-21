@@ -124,7 +124,7 @@ function updateSelectionUi() {
   const deckId = selection.deckId;
   const sheet = selection.sheet;
 
-  setText("availableCount", (deckId && sheet) ? "Ready to load questions" : "Select subject and area");
+  setText("availableCount", (deckId && sheet) ? t('readyToLoad') : t('selectSubjectAndArea'));
 
   const canStart = Boolean(deckId && sheet);
   setDisabled("startPracticeBtn", !canStart);
@@ -154,7 +154,7 @@ function currentCard() {
 function renderFlashcard() {
   const c = currentCard();
   if (!c) {
-    setError("flashcardsError", "No cards loaded.");
+    setError("flashcardsError", t('noCardsLoaded'));
     setText("fcQuestion", "—");
     setText("fcAnswer", "—");
     setText("fcPos", "—");
@@ -172,14 +172,14 @@ function renderFlashcard() {
   setText("fcPos", `${session.index + 1} / ${session.cards.length}`);
 
   const tags = (c.tags || "").trim();
-  setText("fcTags", tags ? tags : "No tags");
+  setText("fcTags", tags ? tags : t('noTags'));
 
   // Flip the card when revealing answer so it replaces the question.
   const flip = el("flipCard");
   if (flip) {
     if (session.reveal) flip.classList.add("flipped"); else flip.classList.remove("flipped");
   }
-  el("btnReveal").textContent = session.reveal ? "Hide answer" : "Reveal answer";
+  el("btnReveal").textContent = session.reveal ? t('hideAnswer') : t('revealAnswer');
 }
 
 function nextCard() {
@@ -207,7 +207,7 @@ async function startPractice() {
     const cards = await provider.getCards(selection.deckId, selection.sheet, true);
 
     if (!cards.length) {
-      setError("selectionError", "No cards found in this area.");
+      setError("selectionError", t('noCardsFoundArea'));
       return;
     }
 
@@ -232,6 +232,9 @@ function openConfigModal(force) {
 
   openModal("configModal");
 
+  // Ensure modal strings reflect current locale when opened
+  applyLocale();
+
   // In first-run, hide cancel to "force" config before use (optional)
   // Here: if force is false and config missing, we keep Cancel hidden.
   const cancelBtn = el("btnCfgCancel");
@@ -245,6 +248,8 @@ function openConfigModal(force) {
 }
 
 function applyLocale() {
+  // Set HTML lang attribute for accessibility
+  try { document.documentElement.lang = getLocale(); } catch {}
   // Selection screen
   setText('selTitle', t('setupTitle'));
   setText('selSubtitle', t('setupSubtitle'));
@@ -260,8 +265,21 @@ function applyLocale() {
   setText('cfgTitle', t('apiSettings'));
   el('apiUrl').placeholder = t('apiUrlPlaceholder');
   el('apiKey').placeholder = t('apiKeyPlaceholder');
+  setText('cfgSubtitle', t('apiHint'));
+  setText('btnCfgCancel', t('cancel'));
+  setText('btnCfgSave', t('save'));
+  setText('cfgTip', t('modalTip'));
+  // Selection card
+  setText('modeTitle', t('practiceMode'));
+  setText('shuffleHint', t('shuffleHint'));
+  // Flashcards screen
+  setText('flashTitle', t('practiceTitle'));
+  setText('labelQuestion', t('questionLabel'));
+  setText('labelAnswer', t('answerLabel'));
+  setText('btnBackToSelection', t('backToSelection'));
   // Top bar tooltip/title
   el('btnTopSettings').title = t('apiSettings');
+  el('btnTopSettings').setAttribute('aria-label', t('apiSettings'));
 }
 
 function closeConfigModal() {
@@ -275,8 +293,8 @@ async function saveConfigFromModal() {
     const apiKey = el("apiKey").value.trim();
 
     if (!USE_MOCK_DATA) {
-      if (!apiUrl) throw new Error("Please enter API URL.");
-      if (!apiKey) throw new Error("Please enter API key.");
+      if (!apiUrl) throw new Error(t('enterApiUrl'));
+      if (!apiKey) throw new Error(t('enterApiKey'));
     }
 
     setConfig({ apiUrl, apiKey });
@@ -312,6 +330,8 @@ async function init() {
 
   // Apply locale to initial UI
   applyLocale();
+  // Expose for debugging so you can re-run localization from DevTools
+  try { window.applyLocale = applyLocale; } catch(e) {}
 
   // Selection screen controls
   el("openSettingsBtn").addEventListener("click", () => openConfigModal(true));

@@ -26,7 +26,7 @@
     <div class="topbarInner">
       <div class="brand" aria-label="Flashcards">
         <div class="brandDot" aria-hidden="true"></div>
-        <div class="brandText">Flashcards</div>
+        <div id="brandText" class="brandText">Flashcards</div>
       </div>
 
       <div class="topbarRight">
@@ -69,7 +69,7 @@
         </div>
 
         <div class="card">
-          <h2 class="cardTitle">Practice mode</h2>
+          <h2 id="modeTitle" class="cardTitle">Practice mode</h2>
 
           <label class="toggle">
             <input id="shuffleToggle" type="checkbox" checked />
@@ -77,7 +77,7 @@
             <span id="shuffleText" class="toggleText">Shuffle questions</span>
           </label>
 
-          <p class="hint">Shuffling helps recall and avoids memorizing order.</p>
+          <p id="shuffleHint" class="hint">Shuffling helps recall and avoids memorizing order.</p>
         </div>
 
         <div class="actions">
@@ -93,7 +93,7 @@
     <section id="screenFlashcards" class="screen hidden">
       <div class="container">
         <header class="screenHeader">
-          <h1 class="title">Practice</h1>
+          <h1 id="flashTitle" class="title">Practice</h1>
           <p id="fcSubtitle" class="subtitle">—</p>
         </header>
 
@@ -106,11 +106,11 @@
            <div id="flipCard" class="flipCard">
              <div class="flipInner">
                <div class="flipFace front">
-                 <div class="qaLabel">Question</div>
+                     <div id="labelQuestion" class="qaLabel">Question</div>
                  <div id="fcQuestion" class="qaText">—</div>
                </div>
                <div class="flipFace back">
-                 <div class="qaLabel">Answer</div>
+                 <div id="labelAnswer" class="qaLabel">Answer</div>
                  <div id="fcAnswer" class="qaText answer">—</div>
                </div>
              </div>
@@ -139,7 +139,7 @@
 
     <div class="modalCard">
       <h2 id="cfgTitle" class="modalTitle">API settings</h2>
-      <p class="modalSubtitle">Enter your Apps Script Web App URL and read-only key.</p>
+      <p id="cfgSubtitle" class="modalSubtitle">Enter your Apps Script Web App URL and read-only key.</p>
 
       <div class="field">
         <label class="label" for="apiUrl">API URL</label>
@@ -165,7 +165,7 @@
       </div>
 
       <p id="cfgError" class="errorText hidden"></p>
-      <p class="modalHint">Tip: configure once on the device and keep this hidden.</p>
+      <p id="cfgTip" class="modalHint">Tip: configure once on the device and keep this hidden.</p>
     </div>
   </div>
 
