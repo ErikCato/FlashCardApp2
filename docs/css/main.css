@@ -353,6 +353,45 @@ body{
   color: rgba(232,235,242,.92);
 }
 
+/* Keep answer area reserved when hidden so layout doesn't shift
+   (override the global .hidden display:none for this element). */
+/* Flip card: 3D flip so answer replaces question like a physical card */
+.flipCard{
+  position: relative;
+  width: 100%;
+  height: 140px; /* fixed height to stabilize layout; adjust as needed */
+  perspective: 1200px;
+  margin-top: 12px;
+}
+
+.flipInner{
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform .6s cubic-bezier(.2,.9,.3,1);
+}
+
+.flipCard.flipped .flipInner{
+  transform: rotateY(180deg);
+}
+
+.flipFace{
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.flipFace.front{ }
+
+.flipFace.back{
+  transform: rotateY(180deg);
+}
+
 /* Modal */
 .modal{
   position: fixed;
@@ -362,12 +401,9 @@ body{
   align-items:center;
   justify-content:center;
 
-  /* safe areas */
-  padding:
-    calc(18px + var(--safe-top))
-    calc(18px + var(--safe-right))
-    calc(18px + var(--safe-bottom))
-    calc(18px + var(--safe-left));
+  /* horizontal safe-area padding only so the flex centering
+     places the modalCard in the true vertical center */
+  padding: 0 calc(18px + var(--safe-right)) 0 calc(18px + var(--safe-left));
 }
 
 .modalBackdrop{
@@ -378,7 +414,11 @@ body{
 }
 
 .modalCard{
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 51;
   width: min(560px, 100%);
   background: linear-gradient(180deg, var(--surface), var(--surface2));
   border: 1px solid var(--border);

@@ -1,4 +1,5 @@
 import { el, show, hide, setText, setError, setDisabled, openModal, closeModal, escapeHtml } from "./ui.js";
+import { t, locales, setLocale, getLocale } from "./i18n.js";
 import { getConfig, setConfig, hasConfig, getLastSelection, setLastSelection, setCardGrade } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
@@ -71,8 +72,7 @@ async function loadDecks() {
 function populateDeckSelect() {
   const sel = el("deckSelect");
   if (!sel) return;
-
-  const options = ['<option value="" selected disabled>Select a subject…</option>']
+  const options = ['<option value="" selected disabled>' + escapeHtml(t('selectSubject')) + '</option>']
     .concat(decks.map(d => `<option value="${escapeHtml(d.deckId)}">${escapeHtml(d.title)}</option>`));
   sel.innerHTML = options.join("");
 
@@ -96,7 +96,7 @@ function populateSheetSelect() {
   const deck = deckMap.get(deckId);
   const sheets = deck?.sheets || [];
 
-  sheetSel.innerHTML = ['<option value="" selected disabled>Select an area…</option>']
+  sheetSel.innerHTML = ['<option value="" selected disabled>' + escapeHtml(t('selectArea')) + '</option>']
     .concat(sheets.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`))
     .join("");
 
@@ -167,7 +167,11 @@ function renderFlashcard() {
   const tags = (c.tags || "").trim();
   setText("fcTags", tags ? tags : "No tags");
 
-  session.reveal ? show("answerWrap") : hide("answerWrap");
+  // Flip the card when revealing answer so it replaces the question.
+  const flip = el("flipCard");
+  if (flip) {
+    if (session.reveal) flip.classList.add("flipped"); else flip.classList.remove("flipped");
+  }
   el("btnReveal").textContent = session.reveal ? "Hide answer" : "Reveal answer";
 }
 
@@ -233,6 +237,26 @@ function openConfigModal(force) {
   }
 }
 
+function applyLocale() {
+  // Selection screen
+  setText('selTitle', t('setupTitle'));
+  setText('selSubtitle', t('setupSubtitle'));
+  setText('chooseContentTitle', t('chooseContent'));
+  setText('labelDeck', t('subject'));
+  setText('labelSheet', t('area'));
+  setText('shuffleText', t('shuffle'));
+  setText('labelLang', t('language'));
+  // Buttons
+  el('openSettingsBtn').textContent = t('apiSettings');
+  el('startPracticeBtn').textContent = t('startPractice');
+  // Modal
+  setText('cfgTitle', t('apiSettings'));
+  el('apiUrl').placeholder = t('apiUrlPlaceholder');
+  el('apiKey').placeholder = t('apiKeyPlaceholder');
+  // Top bar tooltip/title
+  el('btnTopSettings').title = t('apiSettings');
+}
+
 function closeConfigModal() {
   closeModal("configModal");
 }
@@ -265,6 +289,22 @@ async function init() {
 
   // Wire top settings button
   el("btnTopSettings").addEventListener("click", () => openConfigModal(true));
+
+  // Language selector
+  const langSel = el('langSelect');
+  if (langSel) {
+    // populate and set current
+    const ls = locales();
+    langSel.innerHTML = ls.map(l => `<option value="${l.code}">${l.name}</option>`).join('');
+    langSel.value = getLocale();
+    langSel.addEventListener('change', (e) => {
+      setLocale(e.target.value);
+      applyLocale();
+    });
+  }
+
+  // Apply locale to initial UI
+  applyLocale();
 
   // Selection screen controls
   el("openSettingsBtn").addEventListener("click", () => openConfigModal(true));
