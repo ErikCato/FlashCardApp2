@@ -161,8 +161,17 @@
 
       <div class="modalActions">
         <button id="btnCfgCancel" class="btn btnSecondary" type="button">Cancel</button>
+        <button id="btnImportAreaJson" class="btn btnSecondary" type="button">Import area JSON…</button>
         <button id="btnCfgSave" class="btn btnPrimary" type="button">Save</button>
       </div>
+
+      <div class="field">
+        <label class="label">Admin / Innehåll</label>
+        <div id="overrideStatus" class="modalHint">Inga lokala overrides</div>
+        <button id="clearOverridesBtn" class="btn btnSecondary" type="button">Rensa importerade områden</button>
+      </div>
+
+      <input id="inputImportAreaJson" type="file" accept="application/json" class="hidden" />
 
       <p id="cfgError" class="errorText hidden"></p>
       <p id="cfgTip" class="modalHint">Tip: configure once on the device and keep this hidden.</p>

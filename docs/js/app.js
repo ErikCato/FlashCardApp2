@@ -3,6 +3,8 @@ import { t, locales, setLocale, getLocale } from "./i18n.js";
 import { getConfig, setConfig, hasConfig, setCardGrade } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
+import * as areaStore from "./storage/areaStore.js";
+import { createOverrideProvider } from "./providers/overrideProvider.js";
 import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
 import { initSelectionController, setDecks, getSelection, restoreLastSelection, updateSelectionUI } from "./controllers/selectionController.js";
 import { initFlashcardsController, startSession as startFlashcardsSession } from "./controllers/flashcardsController.js";
@@ -50,7 +52,8 @@ function createProvider(config, useMock) {
 }
 
 function loadProvider() {
-  provider = createProvider(getConfig(), USE_MOCK_DATA);
+  const baseProvider = createProvider(getConfig(), USE_MOCK_DATA);
+  provider = createOverrideProvider(baseProvider, areaStore);
 }
 
 async function loadDecks() {
@@ -137,6 +140,7 @@ async function init() {
 
   initConfigController({
     requireConfig: () => (!USE_MOCK_DATA && !hasConfig()),
+    getCurrentDeckId: () => getSelection().deckId,
     onConfigSaved: async ({ apiUrl, apiKey }) => {
       if (!USE_MOCK_DATA) {
         if (!apiUrl) throw new Error(t('enterApiUrl'));

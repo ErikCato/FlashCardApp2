@@ -1,0 +1,26 @@
+{
+  "deckId": "samh1b",
+  "area": {
+    "id": "mr",
+    "name": "Mänskliga rättigheter (Import-test)"
+  },
+  "cards": [
+    {
+      "id": "mr-import-1",
+      "question": "Vad betyder mänskliga rättigheter i praktiken?",
+      "answer": "Att alla människor har grundläggande fri- och rättigheter oavsett bakgrund.",
+      "tags": "import,test",
+      "level": 1,
+      "active": true
+    },
+    {
+      "id": "mr-import-2",
+      "q": "Vilket år antogs FN:s allmänna förklaring om de mänskliga rättigheterna?",
+      "a": "1948",
+      "tags": "FN,årtal",
+      "level": 1,
+      "active": true
+    }
+  ],
+  "updatedAt": "2026-02-21T16:45:00.000Z"
+}
