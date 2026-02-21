@@ -27,11 +27,38 @@ const MOCK = {
 
 export const mockProvider = {
   async getDecks() {
-    return MOCK.decks;
+    return MOCK.decks.map((d) => ({
+      deckId: d.deckId,
+      title: d.title || d.deckId,
+      areas: (d.areas || d.sheets || []).map((area) => {
+        if (typeof area === "string") {
+          const raw = String(area || "").trim();
+          if (!raw) return { id: "", name: "" };
+          if (raw.includes("|")) {
+            const [idPart, ...nameParts] = raw.split("|");
+            const id = String(idPart || "").trim();
+            const name = String(nameParts.join("|") || id).trim();
+            return { id, name };
+          }
+          return { id: raw, name: raw };
+        }
+
+        const id = String(area.id || area.sheet || "").trim();
+        const name = String(area.name || area.title || id).trim();
+        return { id, name };
+      }).filter(a => a.id),
+    }));
   },
-  async getCards(deckId, sheet, activeOnly = true) {
-    const key = `${deckId}::${sheet}`;
-    const list = (MOCK.cards[key] || []).slice();
+  async getCards(deckId, areaId, activeOnly = true) {
+    const key = `${deckId}::${areaId}`;
+    const list = (MOCK.cards[key] || []).slice().map((card, index) => ({
+      id: String(card.id || `card-${index + 1}`),
+      question: String(card.question || ""),
+      answer: String(card.answer || ""),
+      tags: String(card.tags || ""),
+      level: Number(card.level || 1),
+      active: card.active !== false,
+    }));
     return activeOnly ? list.filter(c => c.active !== false) : list;
   }
 };

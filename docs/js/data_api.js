@@ -24,48 +24,58 @@ async function apiGet(cfg, params) {
   return js;
 }
 
-function normalizeSheetEntry(entry) {
+function normalizeAreaEntry(entry) {
   if (entry && typeof entry === "object") {
     const id = String(entry.id || entry.sheet || "").trim();
-    const title = String(entry.title || id).trim();
-    return { id, title };
+    const name = String(entry.name || entry.title || id).trim();
+    return { id, name };
   }
 
   const raw = String(entry || "").trim();
-  if (!raw) return { id: "", title: "" };
+  if (!raw) return { id: "", name: "" };
 
   if (raw.includes("|")) {
-    const [idPart, ...titleParts] = raw.split("|");
+    const [idPart, ...nameParts] = raw.split("|");
     const id = String(idPart || "").trim();
-    const title = String(titleParts.join("|") || id).trim();
-    return { id, title };
+    const name = String(nameParts.join("|") || id).trim();
+    return { id, name };
   }
 
-  return { id: raw, title: raw };
+  return { id: raw, name: raw };
+}
+
+function normalizeCard(card, index) {
+  const id = String(card?.id || `card-${index + 1}`).trim();
+  const question = String(card?.question || "").trim();
+  const answer = String(card?.answer || "").trim();
+  const tags = String(card?.tags || "").trim();
+  const level = Number(card?.level || 1);
+  const active = card?.active !== false;
+  return { id, question, answer, tags, level, active };
 }
 
 export function apiProvider(cfg) {
   return {
     async getDecks() {
       const js = await apiGet(cfg, { path: "decks" });
-      // expects: {decks:[{deckId,title,spreadsheetId,sheets:[...] }]}
+      // supports: {decks:[{deckId,title,areas:[...]}]} or legacy sheets
       return (js.decks || []).map(d => ({
         deckId: d.deckId,
         title: d.title || d.deckId,
-        sheets: (d.sheets || [])
-          .map(normalizeSheetEntry)
+        areas: (Array.isArray(d.areas) ? d.areas : (d.sheets || []))
+          .map(normalizeAreaEntry)
           .filter(s => s.id),
       }));
     },
 
-    async getCards(deckId, sheet, activeOnly = true) {
+    async getCards(deckId, areaId, activeOnly = true) {
       const js = await apiGet(cfg, {
         path: "cards",
         deckId,
-        sheet,
+        sheet: areaId,
         activeOnly: activeOnly ? "true" : "false",
       });
-      return js.cards || [];
+      return (js.cards || []).map(normalizeCard);
     },
   };
 }
