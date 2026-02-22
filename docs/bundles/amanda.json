@@ -9,7 +9,7 @@
           "id": "intro",
           "name": "Intro",
           "cards": [
-            { "q": "Funkar sync från URL?", "a": "Ja, om du ser detta kort så funkar det." },
+            { "q": "Vilken URL ska användas för bundle?", "a": "Använd bundles/amanda.json i Admin URL-källa." },
             { "q": "Funkar sync från URL?", "a": "Ja, om du ser detta kort så funkar det." },
             { "q": "Funkar offline efter reload?", "a": "Ja, om korten finns kvar utan nät." }
           ]
