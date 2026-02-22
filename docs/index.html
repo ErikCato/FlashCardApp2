@@ -30,7 +30,7 @@
       </div>
 
       <div class="topbarRight">
-        <button id="btnTopSettings" class="iconBtn" type="button" aria-label="API settings" title="API settings">
+        <button id="btnTopAdmin" class="iconBtn" type="button" aria-label="Admin" title="Admin">
           ⚙️
         </button>
       </div>
@@ -81,7 +81,6 @@
         </div>
 
         <div class="actions">
-          <button id="openSettingsBtn" class="btn btnSecondary" type="button">API settings</button>
           <button id="startPracticeBtn" class="btn btnPrimary" type="button" disabled>Start practice</button>
         </div>
 
@@ -132,72 +131,74 @@
         <p id="flashcardsError" class="errorText hidden"></p>
       </div>
     </section>
+
+    <!-- ADMIN SCREEN -->
+    <section id="screenAdmin" class="screen hidden">
+      <div class="container">
+        <header class="screenHeader">
+          <h1 class="title">Admin</h1>
+          <p class="subtitle">Hantera datakälla och synkning.</p>
+        </header>
+
+        <div class="card">
+          <h2 class="cardTitle">Datakälla</h2>
+
+          <div class="field">
+            <label class="label" for="adminSourceSelect">Källa</label>
+            <select id="adminSourceSelect" class="select">
+              <option value="sheets">Google Sheets</option>
+              <option value="bundle-file">JSON-fil (bundle)</option>
+              <option value="bundle-url">URL (bundle)</option>
+            </select>
+          </div>
+
+          <div id="adminSheetsWrap" class="field">
+            <label class="label" for="adminApiUrl">API URL</label>
+            <input id="adminApiUrl" class="input" placeholder="https://script.google.com/macros/s/.../exec" />
+
+            <label class="label" for="adminApiKey">Read-only key</label>
+            <input id="adminApiKey" class="input" placeholder="READONLY_KEY" />
+          </div>
+
+          <div id="adminBundleFileWrap" class="field hidden">
+            <button id="btnAdminPickBundleFile" class="btn btnSecondary" type="button">Välj bundle-fil…</button>
+            <p id="adminBundleFileStatus" class="hint">Ingen fil vald</p>
+          </div>
+
+          <div id="adminBundleUrlWrap" class="field hidden">
+            <label class="label" for="adminBundleUrl">Bundle-URL</label>
+            <input id="adminBundleUrl" class="input" placeholder="https://example.com/flashcards-bundle.json" />
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="cardTitle">Synka</h2>
+          <button id="btnAdminSyncNow" class="btn btnPrimary" type="button">Synka nu</button>
+        </div>
+
+        <div class="card">
+          <h2 class="cardTitle">Status</h2>
+          <p id="adminStatusSynced" class="hint">Senast synkad: —</p>
+          <p id="adminStatusCounts" class="hint">0 decks • 0 områden • 0 kort</p>
+          <p id="adminStatusSource" class="hint">Datakälla: —</p>
+          <p id="adminStatusEmpty" class="hint">Inget innehåll på denna enhet ännu.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="cardTitle">System</h2>
+          <button id="btnAdminClearLocalData" class="btn btnSecondary" type="button">Rensa all lokal data</button>
+        </div>
+
+        <div class="row">
+          <button id="btnAdminBack" class="btn btnSecondary" type="button">Tillbaka</button>
+        </div>
+
+        <p id="adminError" class="errorText hidden"></p>
+      </div>
+    </section>
   </main>
 
-  <!-- CONFIG MODAL -->
-  <div id="configModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
-    <div class="modalBackdrop"></div>
-
-    <div class="modalCard">
-      <h2 id="cfgTitle" class="modalTitle">API settings</h2>
-      <p id="cfgSubtitle" class="modalSubtitle">Enter your Apps Script Web App URL and read-only key.</p>
-
-      <div class="field">
-        <label class="label" for="apiUrl">API URL</label>
-        <input id="apiUrl" class="input" placeholder="https://script.google.com/macros/s/.../exec" />
-      </div>
-
-      <div class="field">
-        <label class="label" for="apiKey">Read-only key</label>
-        <input id="apiKey" class="input" placeholder="READONLY_KEY" />
-      </div>
-
-      <div class="field">
-        <label id="labelLang" class="label" for="langSelect">Language</label>
-        <select id="langSelect" class="select">
-          <option value="en">English</option>
-          <option value="sv">Svenska</option>
-        </select>
-      </div>
-
-      <div class="modalActions">
-        <button id="btnCfgCancel" class="btn btnSecondary" type="button">Cancel</button>
-        <button id="btnImportAreaJson" class="btn btnSecondary" type="button">Import area JSON…</button>
-        <button id="btnCfgSave" class="btn btnPrimary" type="button">Save</button>
-      </div>
-
-      <div class="field">
-        <label class="label">Admin / Innehåll</label>
-        <label class="label" for="syncSourceSelect">Källa</label>
-        <select id="syncSourceSelect" class="select">
-          <option value="sheets">Sheets</option>
-          <option value="bundle-file">Local bundle JSON file</option>
-          <option value="bundle-url">Bundle JSON URL</option>
-        </select>
-
-        <div id="syncSourceFileWrap" class="field hidden">
-          <button id="btnPickBundleFile" class="btn btnSecondary" type="button">Välj bundle JSON…</button>
-          <div id="bundleFileStatus" class="modalHint">Ingen fil vald</div>
-        </div>
-
-        <div id="syncSourceUrlWrap" class="field hidden">
-          <label class="label" for="bundleUrlInput">Bundle URL</label>
-          <input id="bundleUrlInput" class="input" placeholder="https://example.com/flashcards-bundle.json" />
-        </div>
-
-        <button id="btnSyncNow" class="btn btnPrimary" type="button">Synka nu</button>
-        <div id="syncStatus" class="modalHint">Inget innehåll på denna enhet ännu.</div>
-        <div id="overrideStatus" class="modalHint">Inga lokala overrides</div>
-        <button id="clearOverridesBtn" class="btn btnSecondary" type="button">Rensa importerade områden</button>
-      </div>
-
-      <input id="inputImportAreaJson" type="file" accept="application/json" class="hidden" />
-      <input id="inputBundleJson" type="file" accept="application/json" class="hidden" />
-
-      <p id="cfgError" class="errorText hidden"></p>
-      <p id="cfgTip" class="modalHint">Tip: configure once on the device and keep this hidden.</p>
-    </div>
-  </div>
+  <input id="inputAdminBundleJson" type="file" accept="application/json" class="hidden" />
 
   <script type="module" src="./js/app.js?v=2"></script>
 </body>

@@ -1,13 +1,13 @@
 import { el, show, hide, setText, setError } from "./ui.js";
-import { t, locales, setLocale, getLocale } from "./i18n.js";
-import { getConfig, setConfig, hasConfig, setCardGrade } from "./storage.js";
+import { t, getLocale } from "./i18n.js";
+import { getConfig, setConfig } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
 import * as areaStore from "./storage/areaStore.js";
 import { getActiveDataset, setActiveDataset, computeCounts } from "./storage/deckStore.js";
 import { createLocalProvider } from "./providers/localProvider.js";
 import { createOverrideProvider } from "./providers/overrideProvider.js";
-import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
+import { initAdminController, setAdminConfigToUI, updateAdminStatus } from "./controllers/adminController.js";
 import { initSelectionController, setDecks, getSelection, restoreLastSelection, updateSelectionUI } from "./controllers/selectionController.js";
 import { initFlashcardsController, startSession as startFlashcardsSession } from "./controllers/flashcardsController.js";
 
@@ -15,12 +15,13 @@ import { initFlashcardsController, startSession as startFlashcardsSession } from
 const USE_MOCK_DATA = false;
 
 const State = {
-  CONFIG: "CONFIG",
   SELECTION: "SELECTION",
   FLASHCARDS: "FLASHCARDS",
+  ADMIN: "ADMIN",
 };
 
 let currentState = State.SELECTION;
+let previousState = State.SELECTION;
 
 let provider = null;
 let decks = [];
@@ -34,18 +35,31 @@ function registerServiceWorker() {
 }
 
 function setState(next) {
+  if (next === State.ADMIN && currentState !== State.ADMIN) {
+    previousState = currentState;
+  }
   currentState = next;
   render();
 }
 
 function render() {
+  const adminBtn = el("btnTopAdmin");
+
   if (currentState === State.SELECTION) {
     show("screenSelection");
     hide("screenFlashcards");
-    // modal may be open/closed separately
+    hide("screenAdmin");
+    if (adminBtn) adminBtn.classList.remove("hidden");
   } else if (currentState === State.FLASHCARDS) {
     hide("screenSelection");
     show("screenFlashcards");
+    hide("screenAdmin");
+    if (adminBtn) adminBtn.classList.remove("hidden");
+  } else if (currentState === State.ADMIN) {
+    hide("screenSelection");
+    hide("screenFlashcards");
+    show("screenAdmin");
+    if (adminBtn) adminBtn.classList.add("hidden");
   }
 }
 
@@ -225,6 +239,8 @@ async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }
     if (!cfg.apiUrl) throw new Error(t("enterApiUrl"));
     if (!cfg.apiKey) throw new Error(t("enterApiKey"));
 
+    setConfig(cfg);
+
     bundle = await fetchBundleViaGuess(cfg.apiUrl, cfg.apiKey);
     if (!bundle) {
       const syncProvider = createProvider(cfg, false);
@@ -239,10 +255,18 @@ async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }
   return dataset.meta;
 }
 
-function showConfigModal() {
-  setConfigToUI(getConfig());
-  applyLocale();
-  openConfigModal();
+function openAdminView() {
+  setAdminConfigToUI(getConfig());
+  updateAdminStatus();
+  setState(State.ADMIN);
+}
+
+function backFromAdmin() {
+  if (previousState === State.FLASHCARDS) {
+    setState(State.FLASHCARDS);
+    return;
+  }
+  setState(State.SELECTION);
 }
 
 async function startPractice() {
@@ -275,6 +299,24 @@ async function startPractice() {
   }
 }
 
+async function clearAllLocalData() {
+  const keys = [
+    "flashcards_cfg_v1",
+    "flashcards_last_v1",
+    "flashcards_progress_v1",
+    "flashcards.areaOverride.v1",
+    "flashcards.deckStore.v1",
+    "flashcards_lang_v1",
+  ];
+
+  keys.forEach((key) => {
+    try { localStorage.removeItem(key); } catch {}
+  });
+
+  window.dispatchEvent(new Event("data:datasetChanged"));
+  window.dispatchEvent(new Event("data:overridesChanged"));
+}
+
 function applyLocale() {
   // Set HTML lang attribute for accessibility
   try { document.documentElement.lang = getLocale(); } catch {}
@@ -285,18 +327,8 @@ function applyLocale() {
   setText('labelDeck', t('subject'));
   setText('labelSheet', t('area'));
   setText('shuffleText', t('shuffle'));
-  setText('labelLang', t('language'));
   // Buttons
-  el('openSettingsBtn').textContent = t('apiSettings');
   el('startPracticeBtn').textContent = t('startPractice');
-  // Modal
-  setText('cfgTitle', t('apiSettings'));
-  el('apiUrl').placeholder = t('apiUrlPlaceholder');
-  el('apiKey').placeholder = t('apiKeyPlaceholder');
-  setText('cfgSubtitle', t('apiHint'));
-  setText('btnCfgCancel', t('cancel'));
-  setText('btnCfgSave', t('save'));
-  setText('cfgTip', t('modalTip'));
   // Selection card
   setText('modeTitle', t('practiceMode'));
   setText('shuffleHint', t('shuffleHint'));
@@ -306,41 +338,36 @@ function applyLocale() {
   setText('labelAnswer', t('answerLabel'));
   setText('btnBackToSelection', t('backToSelection'));
   // Top bar tooltip/title
-  el('btnTopSettings').title = t('apiSettings');
-  el('btnTopSettings').setAttribute('aria-label', t('apiSettings'));
+  if (el('btnTopAdmin')) {
+    el('btnTopAdmin').title = 'Admin';
+    el('btnTopAdmin').setAttribute('aria-label', 'Admin');
+  }
   updateSelectionUI();
-  updateConfigControllerUi();
+  updateAdminStatus();
 }
 
 async function init() {
   registerServiceWorker();
 
-  initConfigController({
-    requireConfig: () => (!USE_MOCK_DATA && !hasConfig()),
-    getCurrentDeckId: () => getSelection().deckId,
+  initAdminController({
     getSyncStatus: () => {
       const active = getActiveDataset();
       if (!active?.meta) return null;
       return {
         lastSyncAt: active.meta.lastSyncAt,
         counts: active.meta.counts,
+        sourceType: active.meta.sourceType,
       };
     },
     onSyncNow: syncDataset,
-    onConfigSaved: async ({ apiUrl, apiKey }) => {
-      if (!USE_MOCK_DATA) {
-        if (!apiUrl) throw new Error(t('enterApiUrl'));
-        if (!apiKey) throw new Error(t('enterApiKey'));
-      }
-      setConfig({ apiUrl, apiKey });
-      loadProvider();
-      await loadDecks();
+    onClearLocalData: async () => {
+      await clearAllLocalData();
     },
+    onBack: backFromAdmin,
   });
 
   initSelectionController({
     provider: () => provider,
-    onOpenSettings: showConfigModal,
     onStartPractice: startPractice,
   });
 
@@ -348,21 +375,8 @@ async function init() {
     onBackToSelection: () => setState(State.SELECTION),
   });
 
-  // Wire top settings button
-  el("btnTopSettings").addEventListener("click", showConfigModal);
-
-  // Language selector
-  const langSel = el('langSelect');
-  if (langSel) {
-    // populate and set current
-    const ls = locales();
-    langSel.innerHTML = ls.map(l => `<option value="${l.code}">${l.name}</option>`).join('');
-    langSel.value = getLocale();
-    langSel.addEventListener('change', (e) => {
-      setLocale(e.target.value);
-      applyLocale();
-    });
-  }
+  // Wire top admin button
+  el("btnTopAdmin")?.addEventListener("click", openAdminView);
 
   // Apply locale to initial UI
   applyLocale();
@@ -377,25 +391,19 @@ async function init() {
     await loadDecks();
     restoreLastSelection();
     updateSelectionUI();
+    updateAdminStatus();
   });
 
-  // If API mode and config missing: force config modal first
-  if (!hasLocalDataset && !USE_MOCK_DATA && !hasConfig()) {
-    showConfigModal();
-  }
+  window.addEventListener("data:overridesChanged", () => {
+    updateAdminStatus();
+  });
 
   // Load decks (mock or API)
   try {
     await loadDecks();
     restoreLastSelection();
   } catch (e) {
-    // If API mode failed, prompt settings
-    if (!USE_MOCK_DATA) {
-      showConfigModal();
-      setError("cfgError", e?.message || String(e));
-    } else {
-      setError("selectionError", e?.message || String(e));
-    }
+    setError("selectionError", e?.message || String(e));
   }
 
   updateSelectionUI();
