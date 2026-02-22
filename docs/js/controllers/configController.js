@@ -7,9 +7,14 @@ let onConfigSavedHandler = async () => {};
 let onConfigCancelledHandler = () => {};
 let requireConfigHandler = () => false;
 let onImportAreaJsonHandler = async () => {};
+let onSyncNowHandler = async () => {};
 let getCurrentDeckIdHandler = () => "";
+let getSyncStatusHandler = () => null;
 let saveLoading = false;
+let syncLoading = false;
 let initialized = false;
+let selectedBundleText = "";
+let selectedBundleName = "";
 
 function isConfigRequired() {
   return Boolean(requireConfigHandler());
@@ -51,10 +56,47 @@ function updateOverrideStatus() {
     : "Inga lokala overrides";
 }
 
+function updateSyncStatusLine() {
+  const statusEl = el("syncStatus");
+  if (!statusEl) return;
+
+  const status = getSyncStatusHandler?.();
+  if (!status || !status.counts || !status.counts.decks) {
+    statusEl.textContent = "Inget innehåll på denna enhet ännu.";
+    return;
+  }
+
+  const when = status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleString() : "okänd tid";
+  const counts = status.counts;
+  statusEl.textContent = `Senast synkad: ${when} • ${counts.decks} decks, ${counts.areas} områden, ${counts.cards} kort`;
+}
+
+function updateSyncSourceUi() {
+  const source = String(el("syncSourceSelect")?.value || "sheets");
+  const fileWrap = el("syncSourceFileWrap");
+  const urlWrap = el("syncSourceUrlWrap");
+  const fileStatus = el("bundleFileStatus");
+  const syncBtn = el("btnSyncNow");
+
+  if (fileWrap) fileWrap.classList.toggle("hidden", source !== "bundle-file");
+  if (urlWrap) urlWrap.classList.toggle("hidden", source !== "bundle-url");
+
+  if (fileStatus) {
+    fileStatus.textContent = selectedBundleName ? `Vald fil: ${selectedBundleName}` : "Ingen fil vald";
+  }
+
+  if (syncBtn) {
+    syncBtn.disabled = syncLoading;
+    syncBtn.textContent = syncLoading ? "Synkar…" : "Synka nu";
+  }
+}
+
 export function updateConfigControllerUi() {
   setText("btnCfgSave", saveLoading ? t("savingConfig") : t("save"));
   setDisabled("btnCfgSave", !canSave());
   updateCancelVisibility();
+  updateSyncSourceUi();
+  updateSyncStatusLine();
 }
 
 export function setConfigToUI(cfg) {
@@ -80,6 +122,7 @@ export function openConfigModal() {
   setError("cfgError", "");
   updateConfigControllerUi();
   updateOverrideStatus();
+  updateSyncStatusLine();
   openModal("configModal");
 }
 
@@ -165,6 +208,64 @@ function onImportButtonClick() {
   fileInput?.click();
 }
 
+function onPickBundleClick() {
+  const fileInput = el("inputBundleJson");
+  fileInput?.click();
+}
+
+async function onBundleFileChange(event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  try {
+    selectedBundleText = await file.text();
+    selectedBundleName = file.name || "bundle.json";
+    updateSyncSourceUi();
+  } catch {
+    selectedBundleText = "";
+    selectedBundleName = "";
+    alert("Kunde inte läsa bundle-filen.");
+    updateSyncSourceUi();
+  } finally {
+    if (input) input.value = "";
+  }
+}
+
+async function onSyncNowClick() {
+  if (syncLoading) return;
+  const sourceType = String(el("syncSourceSelect")?.value || "sheets");
+
+  try {
+    syncLoading = true;
+    updateSyncSourceUi();
+
+    const cfg = getConfigFromUI();
+    const bundleUrl = String(el("bundleUrlInput")?.value || "").trim();
+
+    const meta = await onSyncNowHandler({
+      sourceType,
+      apiUrl: cfg.apiUrl,
+      apiKey: cfg.apiKey,
+      bundleUrl,
+      bundleText: selectedBundleText,
+      bundleFileName: selectedBundleName,
+    });
+
+    updateSyncStatusLine();
+    if (meta?.counts) {
+      alert(`Synk klar: ${meta.counts.decks} decks, ${meta.counts.areas} områden, ${meta.counts.cards} kort.`);
+    } else {
+      alert("Synk klar.");
+    }
+  } catch (e) {
+    alert(e?.message || "Synk misslyckades.");
+  } finally {
+    syncLoading = false;
+    updateSyncSourceUi();
+  }
+}
+
 function onClearOverridesClick() {
   const deckId = currentDeckId();
   if (!deckId) {
@@ -186,12 +287,14 @@ function onClearOverridesClick() {
   alert("Overrides borttagna.");
 }
 
-export function initConfigController({ onConfigSaved, onConfigCancelled, requireConfig, onImportAreaJson, getCurrentDeckId } = {}) {
+export function initConfigController({ onConfigSaved, onConfigCancelled, requireConfig, onImportAreaJson, onSyncNow, getCurrentDeckId, getSyncStatus } = {}) {
   if (typeof onConfigSaved === "function") onConfigSavedHandler = onConfigSaved;
   if (typeof onConfigCancelled === "function") onConfigCancelledHandler = onConfigCancelled;
   if (typeof requireConfig === "function") requireConfigHandler = requireConfig;
   if (typeof onImportAreaJson === "function") onImportAreaJsonHandler = onImportAreaJson;
+  if (typeof onSyncNow === "function") onSyncNowHandler = onSyncNow;
   if (typeof getCurrentDeckId === "function") getCurrentDeckIdHandler = getCurrentDeckId;
+  if (typeof getSyncStatus === "function") getSyncStatusHandler = getSyncStatus;
 
   if (initialized) {
     updateConfigControllerUi();
@@ -205,6 +308,10 @@ export function initConfigController({ onConfigSaved, onConfigCancelled, require
   el("btnImportAreaJson")?.addEventListener("click", onImportButtonClick);
   el("inputImportAreaJson")?.addEventListener("change", onImportFileChange);
   el("clearOverridesBtn")?.addEventListener("click", onClearOverridesClick);
+  el("syncSourceSelect")?.addEventListener("change", updateSyncSourceUi);
+  el("btnPickBundleFile")?.addEventListener("click", onPickBundleClick);
+  el("inputBundleJson")?.addEventListener("change", onBundleFileChange);
+  el("btnSyncNow")?.addEventListener("click", onSyncNowClick);
   document.querySelector("#configModal .modalBackdrop")?.addEventListener("click", onBackdropClick);
 
   initialized = true;

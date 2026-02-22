@@ -4,6 +4,8 @@ import { getConfig, setConfig, hasConfig, setCardGrade } from "./storage.js";
 import { mockProvider } from "./data_mock.js";
 import { apiProvider } from "./data_api.js";
 import * as areaStore from "./storage/areaStore.js";
+import { getActiveDataset, setActiveDataset, computeCounts } from "./storage/deckStore.js";
+import { createLocalProvider } from "./providers/localProvider.js";
 import { createOverrideProvider } from "./providers/overrideProvider.js";
 import { initConfigController, openConfigModal, setConfigToUI, updateConfigControllerUi } from "./controllers/configController.js";
 import { initSelectionController, setDecks, getSelection, restoreLastSelection, updateSelectionUI } from "./controllers/selectionController.js";
@@ -23,6 +25,7 @@ let currentState = State.SELECTION;
 let provider = null;
 let decks = [];
 let deckMap = new Map();
+let hasLocalDataset = false;
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
@@ -51,15 +54,189 @@ function createProvider(config, useMock) {
   return apiProvider(config || {});
 }
 
+function buildRuntimeProvider() {
+  const active = getActiveDataset();
+  const counts = computeCounts(active || {});
+  hasLocalDataset = counts.decks > 0;
+
+  if (hasLocalDataset) {
+    return createOverrideProvider(createLocalProvider(), areaStore);
+  }
+
+  // Keep base provider available for explicit sync, but runtime starts empty until sync.
+  return createOverrideProvider(createProvider(getConfig(), USE_MOCK_DATA), areaStore);
+}
+
 function loadProvider() {
-  const baseProvider = createProvider(getConfig(), USE_MOCK_DATA);
-  provider = createOverrideProvider(baseProvider, areaStore);
+  provider = buildRuntimeProvider();
 }
 
 async function loadDecks() {
+  if (!hasLocalDataset) {
+    decks = [];
+    deckMap = new Map();
+    setDecks([]);
+    return;
+  }
   decks = await provider.getDecks();
   deckMap = new Map(decks.map(d => [d.deckId, d]));
   setDecks(decks);
+}
+
+async function fetchBundleViaGuess(apiUrl, apiKey) {
+  const guessParams = ["op", "action", "route"];
+
+  for (const key of guessParams) {
+    try {
+      const url = new URL(String(apiUrl || "").trim());
+      if (apiKey) url.searchParams.set("key", String(apiKey || "").trim());
+      url.searchParams.set(key, "bundle");
+
+      const res = await fetch(url.toString(), { method: "GET" });
+      if (!res.ok) continue;
+      const js = await res.json().catch(() => null);
+      if (js && js.schemaVersion === 1 && Array.isArray(js.decks)) return js;
+    } catch {
+      // try next pattern
+    }
+  }
+
+  return null;
+}
+
+async function buildBundleFromProvider(syncProvider) {
+  const decks = await syncProvider.getDecks();
+  const out = [];
+
+  for (const deck of decks || []) {
+    const deckId = String(deck?.deckId || "").trim();
+    if (!deckId) continue;
+
+    const areas = typeof syncProvider.getAreas === "function"
+      ? await syncProvider.getAreas(deckId)
+      : (deck?.areas || []);
+
+    const mappedAreas = [];
+    for (const area of areas || []) {
+      const areaId = String(area?.id || "").trim();
+      if (!areaId) continue;
+      const cards = await syncProvider.getCards(deckId, areaId, true);
+      mappedAreas.push({
+        id: areaId,
+        name: String(area?.name || areaId),
+        cards: Array.isArray(cards) ? cards : [],
+      });
+    }
+
+    out.push({
+      deck: {
+        id: deckId,
+        name: String(deck?.title || deckId),
+      },
+      areas: mappedAreas,
+    });
+  }
+
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    decks: out,
+  };
+}
+
+function normalizeBundleToDataset(bundle, { sourceType, sourceMeta }) {
+  if (!bundle || bundle.schemaVersion !== 1 || !Array.isArray(bundle.decks)) {
+    throw new Error("Ogiltig bundle: schemaVersion/decks saknas.");
+  }
+
+  const decksMap = {};
+
+  for (const deckEntry of bundle.decks) {
+    const deckId = String(deckEntry?.deck?.id || "").trim();
+    const deckName = String(deckEntry?.deck?.name || deckId).trim();
+    if (!deckId) continue;
+
+    const areaMap = {};
+    const cardMap = {};
+
+    const areas = Array.isArray(deckEntry?.areas) ? deckEntry.areas : [];
+    for (const areaEntry of areas) {
+      const areaId = String(areaEntry?.id || "").trim();
+      const areaName = String(areaEntry?.name || areaId).trim();
+      if (!areaId) continue;
+
+      const cards = Array.isArray(areaEntry?.cards) ? areaEntry.cards : [];
+      if (!cards.length) continue;
+
+      areaMap[areaId] = { id: areaId, name: areaName };
+      cardMap[areaId] = cards;
+    }
+
+    if (!Object.keys(areaMap).length) continue;
+
+    decksMap[deckId] = {
+      deck: { id: deckId, name: deckName },
+      areas: areaMap,
+      cards: cardMap,
+    };
+  }
+
+  const dataset = {
+    meta: {
+      sourceType,
+      sourceMeta: sourceMeta || {},
+      lastSyncAt: new Date().toISOString(),
+      generatedAt: bundle.generatedAt || new Date().toISOString(),
+      counts: { decks: 0, areas: 0, cards: 0 },
+    },
+    decks: decksMap,
+  };
+
+  const counts = computeCounts(dataset);
+  if (!counts.decks || !counts.areas || !counts.cards) {
+    throw new Error("Synk misslyckades: bundle innehåller inget användbart innehåll.");
+  }
+
+  dataset.meta.counts = counts;
+  return dataset;
+}
+
+async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }) {
+  const type = String(sourceType || "").trim();
+  let bundle;
+  let sourceMeta = {};
+
+  if (type === "bundle-file") {
+    if (!bundleText) throw new Error("Välj en bundle JSON-fil först.");
+    bundle = JSON.parse(bundleText);
+    sourceMeta = { file: "local" };
+  } else if (type === "bundle-url") {
+    const url = String(bundleUrl || "").trim();
+    if (!url) throw new Error("Ange Bundle URL.");
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Kunde inte hämta bundle (HTTP ${res.status}).`);
+    bundle = await res.json();
+    sourceMeta = { url };
+  } else {
+    const cfg = {
+      apiUrl: String(apiUrl || "").trim(),
+      apiKey: String(apiKey || "").trim(),
+    };
+    if (!cfg.apiUrl) throw new Error(t("enterApiUrl"));
+    if (!cfg.apiKey) throw new Error(t("enterApiKey"));
+
+    bundle = await fetchBundleViaGuess(cfg.apiUrl, cfg.apiKey);
+    if (!bundle) {
+      const syncProvider = createProvider(cfg, false);
+      bundle = await buildBundleFromProvider(syncProvider);
+    }
+    sourceMeta = { apiUrl: cfg.apiUrl };
+  }
+
+  const dataset = normalizeBundleToDataset(bundle, { sourceType: type || "sheets", sourceMeta });
+  setActiveDataset(dataset); // atomic replace only after validation
+  window.dispatchEvent(new Event("data:datasetChanged"));
+  return dataset.meta;
 }
 
 function showConfigModal() {
@@ -141,6 +318,15 @@ async function init() {
   initConfigController({
     requireConfig: () => (!USE_MOCK_DATA && !hasConfig()),
     getCurrentDeckId: () => getSelection().deckId,
+    getSyncStatus: () => {
+      const active = getActiveDataset();
+      if (!active?.meta) return null;
+      return {
+        lastSyncAt: active.meta.lastSyncAt,
+        counts: active.meta.counts,
+      };
+    },
+    onSyncNow: syncDataset,
     onConfigSaved: async ({ apiUrl, apiKey }) => {
       if (!USE_MOCK_DATA) {
         if (!apiUrl) throw new Error(t('enterApiUrl'));
@@ -186,8 +372,15 @@ async function init() {
   // Initialize provider
   loadProvider();
 
+  window.addEventListener("data:datasetChanged", async () => {
+    loadProvider();
+    await loadDecks();
+    restoreLastSelection();
+    updateSelectionUI();
+  });
+
   // If API mode and config missing: force config modal first
-  if (!USE_MOCK_DATA && !hasConfig()) {
+  if (!hasLocalDataset && !USE_MOCK_DATA && !hasConfig()) {
     showConfigModal();
   }
 

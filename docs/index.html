@@ -86,6 +86,7 @@
         </div>
 
         <p id="selectionError" class="errorText hidden"></p>
+        <p id="selectionEmptyState" class="hint hidden">Inget innehåll på den här enheten ännu. Be en förälder importera via Admin.</p>
       </div>
     </section>
 
@@ -167,11 +168,31 @@
 
       <div class="field">
         <label class="label">Admin / Innehåll</label>
+        <label class="label" for="syncSourceSelect">Källa</label>
+        <select id="syncSourceSelect" class="select">
+          <option value="sheets">Sheets</option>
+          <option value="bundle-file">Local bundle JSON file</option>
+          <option value="bundle-url">Bundle JSON URL</option>
+        </select>
+
+        <div id="syncSourceFileWrap" class="field hidden">
+          <button id="btnPickBundleFile" class="btn btnSecondary" type="button">Välj bundle JSON…</button>
+          <div id="bundleFileStatus" class="modalHint">Ingen fil vald</div>
+        </div>
+
+        <div id="syncSourceUrlWrap" class="field hidden">
+          <label class="label" for="bundleUrlInput">Bundle URL</label>
+          <input id="bundleUrlInput" class="input" placeholder="https://example.com/flashcards-bundle.json" />
+        </div>
+
+        <button id="btnSyncNow" class="btn btnPrimary" type="button">Synka nu</button>
+        <div id="syncStatus" class="modalHint">Inget innehåll på denna enhet ännu.</div>
         <div id="overrideStatus" class="modalHint">Inga lokala overrides</div>
         <button id="clearOverridesBtn" class="btn btnSecondary" type="button">Rensa importerade områden</button>
       </div>
 
       <input id="inputImportAreaJson" type="file" accept="application/json" class="hidden" />
+      <input id="inputBundleJson" type="file" accept="application/json" class="hidden" />
 
       <p id="cfgError" class="errorText hidden"></p>
       <p id="cfgTip" class="modalHint">Tip: configure once on the device and keep this hidden.</p>

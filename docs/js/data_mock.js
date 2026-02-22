@@ -49,6 +49,11 @@ export const mockProvider = {
       }).filter(a => a.id),
     }));
   },
+  async getAreas(deckId) {
+    const decks = await this.getDecks();
+    const deck = (decks || []).find((d) => d.deckId === deckId);
+    return deck?.areas || [];
+  },
   async getCards(deckId, areaId, activeOnly = true) {
     const key = `${deckId}::${areaId}`;
     const list = (MOCK.cards[key] || []).slice().map((card, index) => ({

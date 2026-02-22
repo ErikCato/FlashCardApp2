@@ -230,6 +230,12 @@ export function updateSelectionUI() {
   const deckId = selection.deckId;
   const areaId = selection.areaId;
   const hasAreaCount = typeof selectedAreaQuestionCount === "number";
+  const emptyStateEl = el("selectionEmptyState");
+
+  if (emptyStateEl) {
+    if (!decks.length) emptyStateEl.classList.remove("hidden");
+    else emptyStateEl.classList.add("hidden");
+  }
 
   setText("startPracticeBtn", startPracticeLoading ? t("startingPractice") : t("startPractice"));
 

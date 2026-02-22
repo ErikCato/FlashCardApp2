@@ -34,9 +34,14 @@ export function createOverrideProvider(baseProvider, areaStore) {
       const did = String(deckId || "").trim();
       if (!did) return [];
 
-      const decks = await baseProvider.getDecks();
-      const baseDeck = (decks || []).find((d) => String(d?.deckId || "").trim() === did);
-      const baseAreas = (baseDeck?.areas || []).map(normalizeArea).filter((a) => a.id);
+      let baseAreas = [];
+      if (typeof baseProvider.getAreas === "function") {
+        baseAreas = ((await baseProvider.getAreas(did)) || []).map(normalizeArea).filter((a) => a.id);
+      } else {
+        const decks = await baseProvider.getDecks();
+        const baseDeck = (decks || []).find((d) => String(d?.deckId || "").trim() === did);
+        baseAreas = (baseDeck?.areas || []).map(normalizeArea).filter((a) => a.id);
+      }
 
       const overrides = areaStore.listAreaOverrides(did) || [];
       const overrideMap = new Map(
