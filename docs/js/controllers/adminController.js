@@ -1,5 +1,8 @@
 import { el, setError } from "../ui.js";
 
+const LS_LAST_BUNDLE_URL = "flashcards.admin.lastBundleUrl";
+const DEFAULT_BUNDLE_URL = "/bundles/amanda.json";
+
 let onSyncNowHandler = async () => {};
 let getSyncStatusHandler = () => null;
 let onClearLocalDataHandler = async () => {};
@@ -11,10 +14,41 @@ let selectedBundleName = "";
 let initialized = false;
 
 function sourceLabel(sourceType) {
-  if (sourceType === "bundle-file") return "JSON-fil";
-  if (sourceType === "bundle-url") return "URL";
+  if (sourceType === "file" || sourceType === "bundle-file") return "Fil";
+  if (sourceType === "url" || sourceType === "bundle-url") return "URL";
   if (sourceType === "sheets") return "Google Sheets";
   return "—";
+}
+
+function getLastBundleUrl() {
+  try {
+    const value = String(localStorage.getItem(LS_LAST_BUNDLE_URL) || "").trim();
+    return value || DEFAULT_BUNDLE_URL;
+  } catch {
+    return DEFAULT_BUNDLE_URL;
+  }
+}
+
+function setLastBundleUrl(value) {
+  try {
+    localStorage.setItem(LS_LAST_BUNDLE_URL, String(value || "").trim() || DEFAULT_BUNDLE_URL);
+  } catch {}
+}
+
+function ensureBundleUrlValue() {
+  const input = el("adminBundleUrl");
+  if (!input) return DEFAULT_BUNDLE_URL;
+  const trimmed = String(input.value || "").trim();
+  if (!trimmed) input.value = getLastBundleUrl();
+  return String(input.value || "").trim() || DEFAULT_BUNDLE_URL;
+}
+
+function setSyncFeedback(message, isError = false) {
+  const feedbackEl = el("adminSyncFeedback");
+  if (!feedbackEl) return;
+  feedbackEl.textContent = String(message || "");
+  feedbackEl.classList.toggle("errorText", Boolean(isError));
+  feedbackEl.classList.toggle("hint", !isError);
 }
 
 function updateSourceUI() {
@@ -22,6 +56,10 @@ function updateSourceUI() {
   el("adminSheetsWrap")?.classList.toggle("hidden", source !== "sheets");
   el("adminBundleFileWrap")?.classList.toggle("hidden", source !== "bundle-file");
   el("adminBundleUrlWrap")?.classList.toggle("hidden", source !== "bundle-url");
+
+  if (source === "bundle-url") {
+    ensureBundleUrlValue();
+  }
 
   const fileStatus = el("adminBundleFileStatus");
   if (fileStatus) fileStatus.textContent = selectedBundleName ? `Vald fil: ${selectedBundleName}` : "Ingen fil vald";
@@ -37,8 +75,10 @@ export function setAdminConfigToUI(cfg) {
   const safe = cfg || {};
   const apiUrlEl = el("adminApiUrl");
   const apiKeyEl = el("adminApiKey");
+  const bundleUrlEl = el("adminBundleUrl");
   if (apiUrlEl) apiUrlEl.value = safe.apiUrl || "";
   if (apiKeyEl) apiKeyEl.value = safe.apiKey || "";
+  if (bundleUrlEl) bundleUrlEl.value = getLastBundleUrl();
 }
 
 export function getAdminConfigFromUI() {
@@ -59,6 +99,12 @@ export function updateAdminStatus() {
     syncedEl.textContent = `Senast synkad: ${when}`;
   }
 
+  const generatedEl = el("adminStatusGenerated");
+  if (generatedEl) {
+    const generated = status?.generatedAt ? new Date(status.generatedAt).toLocaleString() : "—";
+    generatedEl.textContent = `Bundle skapad: ${generated}`;
+  }
+
   const countsEl = el("adminStatusCounts");
   if (countsEl) {
     countsEl.textContent = `${counts.decks} decks • ${counts.areas} områden • ${counts.cards} kort`;
@@ -66,7 +112,7 @@ export function updateAdminStatus() {
 
   const sourceEl = el("adminStatusSource");
   if (sourceEl) {
-    sourceEl.textContent = `Datakälla: ${sourceLabel(status?.sourceType)}`;
+    sourceEl.textContent = `Källa: ${sourceLabel(status?.sourceType)}`;
   }
 
   el("adminStatusEmpty")?.classList.toggle("hidden", hasData);
@@ -100,12 +146,17 @@ async function onSyncNowClick() {
 
   try {
     setError("adminError", "");
+    setSyncFeedback("Synkar…");
     syncLoading = true;
     updateSourceUI();
 
     const sourceType = String(el("adminSourceSelect")?.value || "sheets");
     const cfg = getAdminConfigFromUI();
-    const bundleUrl = String(el("adminBundleUrl")?.value || "").trim();
+    const bundleUrl = sourceType === "bundle-url"
+      ? ensureBundleUrlValue()
+      : String(el("adminBundleUrl")?.value || "").trim();
+
+    if (sourceType === "bundle-url") setLastBundleUrl(bundleUrl);
 
     const meta = await onSyncNowHandler({
       sourceType,
@@ -117,10 +168,12 @@ async function onSyncNowClick() {
     });
 
     updateAdminStatus();
-    if (meta?.counts) alert(`Synk klar: ${meta.counts.decks} decks, ${meta.counts.areas} områden, ${meta.counts.cards} kort.`);
-    else alert("Synk klar.");
+    if (meta?.counts) setSyncFeedback(`Synk klar: ${meta.counts.decks} decks • ${meta.counts.areas} områden • ${meta.counts.cards} kort`);
+    else setSyncFeedback("Synk klar.");
   } catch (e) {
-    setError("adminError", e?.message || String(e));
+    const message = e?.message || String(e);
+    setError("adminError", message);
+    setSyncFeedback(`Fel: ${message}`, true);
   } finally {
     syncLoading = false;
     updateSourceUI();
@@ -161,6 +214,10 @@ export function initAdminController({ onSyncNow, getSyncStatus, onClearLocalData
   }
 
   el("adminSourceSelect")?.addEventListener("change", updateSourceUI);
+  el("adminBundleUrl")?.addEventListener("blur", () => {
+    const value = ensureBundleUrlValue();
+    setLastBundleUrl(value);
+  });
   el("btnAdminPickBundleFile")?.addEventListener("click", onPickBundleClick);
   el("inputAdminBundleJson")?.addEventListener("change", onBundleFileChange);
   el("btnAdminSyncNow")?.addEventListener("click", onSyncNowClick);
@@ -168,6 +225,8 @@ export function initAdminController({ onSyncNow, getSyncStatus, onClearLocalData
   el("btnAdminBack")?.addEventListener("click", onBackClick);
 
   initialized = true;
+  ensureBundleUrlValue();
+  setSyncFeedback("");
   updateSourceUI();
   updateAdminStatus();
 }

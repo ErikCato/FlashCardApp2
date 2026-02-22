@@ -219,18 +219,25 @@ async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }
   const type = String(sourceType || "").trim();
   let bundle;
   let sourceMeta = {};
+  let normalizedSourceType = "sheets";
 
   if (type === "bundle-file") {
     if (!bundleText) throw new Error("Välj en bundle JSON-fil först.");
     bundle = JSON.parse(bundleText);
     sourceMeta = { file: "local" };
+    normalizedSourceType = "file";
   } else if (type === "bundle-url") {
-    const url = String(bundleUrl || "").trim();
-    if (!url) throw new Error("Ange Bundle URL.");
-    const res = await fetch(url);
+    const originalUrl = String(bundleUrl || "").trim();
+    if (!originalUrl) throw new Error("Ange Bundle URL.");
+
+    const separator = originalUrl.includes("?") ? "&" : "?";
+    const cacheBustedUrl = `${originalUrl}${separator}v=${Date.now()}`;
+
+    const res = await fetch(cacheBustedUrl, { cache: "no-store", redirect: "follow" });
     if (!res.ok) throw new Error(`Kunde inte hämta bundle (HTTP ${res.status}).`);
     bundle = await res.json();
-    sourceMeta = { url };
+    sourceMeta = { url: originalUrl };
+    normalizedSourceType = "url";
   } else {
     const cfg = {
       apiUrl: String(apiUrl || "").trim(),
@@ -247,9 +254,10 @@ async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }
       bundle = await buildBundleFromProvider(syncProvider);
     }
     sourceMeta = { apiUrl: cfg.apiUrl };
+    normalizedSourceType = "sheets";
   }
 
-  const dataset = normalizeBundleToDataset(bundle, { sourceType: type || "sheets", sourceMeta });
+  const dataset = normalizeBundleToDataset(bundle, { sourceType: normalizedSourceType, sourceMeta });
   setActiveDataset(dataset); // atomic replace only after validation
   window.dispatchEvent(new Event("data:datasetChanged"));
   return dataset.meta;
@@ -307,6 +315,7 @@ async function clearAllLocalData() {
     "flashcards.areaOverride.v1",
     "flashcards.deckStore.v1",
     "flashcards_lang_v1",
+    "flashcards.admin.lastBundleUrl",
   ];
 
   keys.forEach((key) => {
@@ -355,6 +364,7 @@ async function init() {
       if (!active?.meta) return null;
       return {
         lastSyncAt: active.meta.lastSyncAt,
+        generatedAt: active.meta.generatedAt,
         counts: active.meta.counts,
         sourceType: active.meta.sourceType,
       };
