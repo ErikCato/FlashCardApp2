@@ -1,129 +1,137 @@
 # FlashCardApp2
 
-Single-page flashcard app (PWA-style) served from `docs/`.
+FlashCardApp2 är en single-page flashcard-app (PWA-style) som körs från `docs/`.
 
-## Features
+## Innehåll
 
-- Deck + area selection
-- Flip-card practice view (question/answer)
-- English/Swedish localization
-- Mock data mode and API mode
-- Local progress and settings via `localStorage`
-- Mobile-friendly fullscreen layout
+- [Funktioner](#funktioner)
+- [Kom igång lokalt](#kom-igång-lokalt)
+- [Arkitektur](#arkitektur)
+- [Datakällor och sync](#datakällor-och-sync)
+- [Bundle-format](#bundle-format)
+- [Validering av bundles (CI)](#validering-av-bundles-ci)
+- [Projektstruktur](#projektstruktur)
 
-## Project Structure
+## Funktioner
 
-- `docs/index.html` — app shell
-- `docs/css/main.css` — styling and responsive/mobile behavior
-- `docs/js/app.js` — app state + UI wiring
-- `docs/js/data_mock.js` — mock provider
-- `docs/js/data_api.js` — API provider
-- `docs/js/storage.js` — local persistence
-- `docs/js/i18n.js` — translations
-- `docs/sw.js` + `docs/manifest.json` — PWA surface
+- Träningsflöde med `Deck -> Area -> Flashcards`
+- Flip-card vy för fråga/svar
+- Offline-first dataset (lokalt lagrat innehåll)
+- Admin-vy för datakälla, sync och systemåtgärder
+- Stöd för datakälla via:
+	- Google Sheets/API
+	- Lokal JSON-bundle-fil
+	- URL till JSON-bundle
+- Svensk/engelsk lokalisering
+- Mobilvänlig layout och PWA-surface
 
-## Run Locally
+## Kom igång lokalt
 
-From repository root:
+Kör från repository root:
 
 ```bash
 python3 -m http.server 8000 --directory docs --bind 0.0.0.0
 ```
 
-Open:
+Öppna sedan:
 
 - `http://localhost:8000`
 
-## Data Modes
+## Arkitektur
 
-In `docs/js/app.js`:
+- `docs/js/app.js`: state machine + bootstrap
+- `docs/js/controllers/selectionController.js`: urvalsflöde
+- `docs/js/controllers/flashcardsController.js`: träningsflöde
+- `docs/js/controllers/adminController.js`: Admin-vy (datakälla/sync/status)
+- `docs/js/providers/localProvider.js`: runtime-provider för lokalt dataset
+- `docs/js/storage/deckStore.js`: lagring av aktivt dataset + metadata
 
-- `const USE_MOCK_DATA = true` → use local mock data
-- `const USE_MOCK_DATA = false` → use backend API
+## Datakällor och sync
 
-## API Mode (Google Apps Script)
+Admin-vyn stöder tre källor:
 
-Expected query style (`GET`):
+1. **Google Sheets** (via API)
+2. **JSON-fil (bundle)**
+3. **URL (bundle)**
 
-- `?path=decks&key=...`
-- `?path=sheets&deckId=...&key=...`
-- `?path=cards&deckId=...&sheet=...&activeOnly=true&key=...`
+Sync är explicit via **Synka nu** och använder **atomic replace**:
 
-### Response shape
+- Nytt dataset ersätter aktivt dataset först efter lyckad fetch + validering.
+- Vid fel behålls befintligt lokalt innehåll.
 
-#### decks
+## Bundle-format
+
+Appen använder schemaVersion `1` för bundles under `docs/bundles/*.json`.
 
 ```json
 {
-	"ok": true,
+	"schemaVersion": 1,
+	"generatedAt": "2026-02-22T10:00:00+01:00",
 	"decks": [
 		{
-			"deckId": "samh1b",
-			"title": "Samhällskunskap 1B",
-			"sheets": ["mr|Mänskliga Rättigheter", "eu|Europeiska Unionen"]
+			"deck": { "id": "demo", "name": "Demo" },
+			"areas": [
+				{
+					"id": "intro",
+					"name": "Intro",
+					"cards": [
+						{ "q": "Fråga", "a": "Svar" }
+					]
+				}
+			]
 		}
 	]
 }
 ```
 
-#### sheets
+ID-regler för bundles:
 
-Preferred format:
+- `deck.id` och `area.id` ska matcha `^[a-z0-9-]+$`
+- IDs måste vara unika i sin respektive scope
 
-```json
-{
-	"ok": true,
-	"deckId": "samh1b",
-	"sheets": [
-		{ "id": "mr", "title": "Mänskliga Rättigheter" },
-		{ "id": "eu", "title": "Europeiska Unionen" }
-	]
-}
+## Validering av bundles (CI)
+
+Bundle-validering körs i:
+
+- `.github/workflows/validate-bundles.yml`
+
+Lokalt kan du köra:
+
+```bash
+python scripts/validate_bundles.py
 ```
 
-#### cards
+Valideraren kontrollerar bland annat:
 
-```json
-{
-	"ok": true,
-	"deckId": "samh1b",
-	"sheet": "mr",
-	"cards": [
-		{
-			"id": "mr-1",
-			"question": "...",
-			"answer": "...",
-			"tags": "definition",
-			"level": 1,
-			"active": true
-		}
-	]
-}
+- JSON-format och `schemaVersion == 1`
+- obligatoriska fält (`generatedAt`, `decks`, `deck`, `areas`, `cards`)
+- icke-tomma `q`/`a`
+- dubbletter av `deck.id`, `area.id` och `q` inom area
+
+## Projektstruktur
+
+```text
+docs/
+	index.html
+	css/main.css
+	js/
+		app.js
+		i18n.js
+		storage.js
+		storage/
+			areaStore.js
+			deckStore.js
+		providers/
+			localProvider.js
+			overrideProvider.js
+		controllers/
+			selectionController.js
+			flashcardsController.js
+			adminController.js
+	bundles/
+		amanda.json
+	sw.js
+	manifest.json
+scripts/
+	validate_bundles.py
 ```
-
-## Sheet Format Notes
-
-- Backend may return sheets either as:
-	- objects: `{ id, title }`
-	- strings: `id|Title`
-- The app normalizes both formats.
-- Card loading always uses the sheet id only (for example `mr`).
-
-## Mobile / PWA Notes
-
-- Viewport is configured for edge-to-edge mobile layout.
-- CSS uses dynamic viewport height (`100dvh`) for iOS/Android browser chrome changes.
-- For iPhone best experience, use “Add to Home Screen”.
-
-## Troubleshooting
-
-- Area dropdown shows `id|Title` raw text:
-	- Ensure latest `docs/js/data_api.js` and `docs/js/app.js` are loaded.
-	- Hard refresh and clear service worker cache.
-
-- Start button disabled after selecting area:
-	- Verify selected option value is a sheet id (for example `mr`), not `mr|Title`.
-	- Check API responses in DevTools Network tab.
-
-- Changes not visible on device:
-	- Unregister service worker in browser dev tools and reload.

@@ -123,6 +123,30 @@ function onShuffleChange() {
   setLastSelection(selection);
 }
 
+async function onOverridesChanged() {
+  const selectionScreen = el("screenSelection");
+  if (!selectionScreen || selectionScreen.classList.contains("hidden")) return;
+  if (!selection.deckId) return;
+
+  try {
+    const provider = resolveProvider();
+    if (!provider || typeof provider.getAreas !== "function") return;
+
+    const areas = await provider.getAreas(selection.deckId);
+    const currentDeck = deckMap.get(selection.deckId);
+    if (!currentDeck) return;
+
+    const nextDeck = { ...currentDeck, areas: Array.isArray(areas) ? areas : [] };
+    deckMap.set(selection.deckId, nextDeck);
+    decks = decks.map((deck) => (deck.deckId === selection.deckId ? nextDeck : deck));
+
+    populateAreaSelect();
+    refreshSelectedAreaQuestionCount();
+  } catch {
+    // keep UI stable on refresh failures
+  }
+}
+
 export function initSelectionController({ provider, onStartPractice, onOpenSettings } = {}) {
   if (provider !== undefined) providerRef = provider;
   if (typeof onStartPractice === "function") onStartPracticeHandler = onStartPractice;
@@ -138,6 +162,7 @@ export function initSelectionController({ provider, onStartPractice, onOpenSetti
   el("sheetSelect")?.addEventListener("change", onAreaChange);
   el("shuffleToggle")?.addEventListener("change", onShuffleChange);
   el("startPracticeBtn")?.addEventListener("click", onStartClick);
+  window.addEventListener("data:overridesChanged", onOverridesChanged);
 
   initialized = true;
   updateSelectionUI();
@@ -205,6 +230,12 @@ export function updateSelectionUI() {
   const deckId = selection.deckId;
   const areaId = selection.areaId;
   const hasAreaCount = typeof selectedAreaQuestionCount === "number";
+  const emptyStateEl = el("selectionEmptyState");
+
+  if (emptyStateEl) {
+    if (!decks.length) emptyStateEl.classList.remove("hidden");
+    else emptyStateEl.classList.add("hidden");
+  }
 
   setText("startPracticeBtn", startPracticeLoading ? t("startingPractice") : t("startPractice"));
 

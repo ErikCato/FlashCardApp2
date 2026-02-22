@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-22T09:20:00.000Z",
+  "decks": [
+    {
+      "deck": {
+        "id": "svenska-7",
+        "name": "Svenska årskurs 7"
+      },
+      "areas": [
+        {
+          "id": "ordklasser",
+          "name": "Ordklasser",
+          "cards": [
+            {
+              "id": "sv7-ok-001",
+              "question": "Vad är ett substantiv?",
+              "answer": "Ett ord för saker, personer, platser eller begrepp.",
+              "tags": "grammatik",
+              "level": 1,
+              "active": true
+            },
+            {
+              "id": "sv7-ok-002",
+              "question": "Ge ett exempel på ett verb.",
+              "answer": "Springa.",
+              "tags": "grammatik",
+              "level": 1,
+              "active": true
+            }
+          ]
+        },
+        {
+          "id": "stavning",
+          "name": "Stavning",
+          "cards": [
+            {
+              "id": "sv7-st-001",
+              "question": "Hur stavas ordet: skjorta eller sjorta?",
+              "answer": "Skjorta.",
+              "tags": "stavning",
+              "level": 1,
+              "active": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "deck": {
+        "id": "matematik-7",
+        "name": "Matematik årskurs 7"
+      },
+      "areas": [
+        {
+          "id": "procent",
+          "name": "Procent",
+          "cards": [
+            {
+              "id": "ma7-pr-001",
+              "question": "Vad är 25% av 200?",
+              "answer": "50.",
+              "tags": "procent",
+              "level": 2,
+              "active": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

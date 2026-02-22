@@ -68,6 +68,12 @@ export function apiProvider(cfg) {
       }));
     },
 
+    async getAreas(deckId) {
+      const decks = await this.getDecks();
+      const deck = (decks || []).find((d) => d.deckId === deckId);
+      return deck?.areas || [];
+    },
+
     async getCards(deckId, areaId, activeOnly = true) {
       const js = await apiGet(cfg, {
         path: "cards",
