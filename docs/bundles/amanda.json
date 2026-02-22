@@ -10,6 +10,7 @@
           "name": "Intro",
           "cards": [
             { "q": "Funkar sync från URL?", "a": "Ja, om du ser detta kort så funkar det." },
+            { "q": "Funkar sync från URL?", "a": "Ja, om du ser detta kort så funkar det." },
             { "q": "Funkar offline efter reload?", "a": "Ja, om korten finns kvar utan nät." }
           ]
         }
