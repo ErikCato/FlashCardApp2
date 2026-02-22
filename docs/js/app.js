@@ -221,17 +221,25 @@ async function syncDataset({ sourceType, apiUrl, apiKey, bundleUrl, bundleText }
   let sourceMeta = {};
   let normalizedSourceType = "sheets";
 
+  const normalizeUserFriendlyBundleUrl = (raw) => {
+    const trimmed = String(raw || "").trim();
+    if (trimmed.startsWith("/bundles/")) return trimmed.slice(1);
+    return trimmed;
+  };
+
   if (type === "bundle-file") {
     if (!bundleText) throw new Error("Välj en bundle JSON-fil först.");
     bundle = JSON.parse(bundleText);
     sourceMeta = { file: "local" };
     normalizedSourceType = "file";
   } else if (type === "bundle-url") {
-    const originalUrl = String(bundleUrl || "").trim();
+    const originalUrl = normalizeUserFriendlyBundleUrl(bundleUrl);
     if (!originalUrl) throw new Error("Ange Bundle URL.");
 
-    const separator = originalUrl.includes("?") ? "&" : "?";
-    const cacheBustedUrl = `${originalUrl}${separator}v=${Date.now()}`;
+    const resolvedUrl = new URL(originalUrl, window.location.href).toString();
+
+    const separator = resolvedUrl.includes("?") ? "&" : "?";
+    const cacheBustedUrl = `${resolvedUrl}${separator}v=${Date.now()}`;
 
     const res = await fetch(cacheBustedUrl, { cache: "no-store", redirect: "follow" });
     if (!res.ok) throw new Error(`Kunde inte hämta bundle (HTTP ${res.status}).`);

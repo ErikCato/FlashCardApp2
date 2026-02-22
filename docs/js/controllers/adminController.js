@@ -1,7 +1,7 @@
 import { el, setError } from "../ui.js";
 
 const LS_LAST_BUNDLE_URL = "flashcards.admin.lastBundleUrl";
-const DEFAULT_BUNDLE_URL = "/bundles/amanda.json";
+const DEFAULT_BUNDLE_URL = "bundles/amanda.json";
 
 let onSyncNowHandler = async () => {};
 let getSyncStatusHandler = () => null;
@@ -22,25 +22,36 @@ function sourceLabel(sourceType) {
 
 function getLastBundleUrl() {
   try {
-    const value = String(localStorage.getItem(LS_LAST_BUNDLE_URL) || "").trim();
+    const value = normalizeUserFriendlyBundleUrl(localStorage.getItem(LS_LAST_BUNDLE_URL));
     return value || DEFAULT_BUNDLE_URL;
   } catch {
     return DEFAULT_BUNDLE_URL;
   }
 }
 
+function normalizeUserFriendlyBundleUrl(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("/bundles/")) return trimmed.slice(1);
+  return trimmed;
+}
+
 function setLastBundleUrl(value) {
   try {
-    localStorage.setItem(LS_LAST_BUNDLE_URL, String(value || "").trim() || DEFAULT_BUNDLE_URL);
+    localStorage.setItem(LS_LAST_BUNDLE_URL, normalizeUserFriendlyBundleUrl(value) || DEFAULT_BUNDLE_URL);
   } catch {}
 }
 
 function ensureBundleUrlValue() {
   const input = el("adminBundleUrl");
   if (!input) return DEFAULT_BUNDLE_URL;
-  const trimmed = String(input.value || "").trim();
-  if (!trimmed) input.value = getLastBundleUrl();
-  return String(input.value || "").trim() || DEFAULT_BUNDLE_URL;
+  const normalized = normalizeUserFriendlyBundleUrl(input.value);
+  if (!normalized) {
+    input.value = getLastBundleUrl();
+    return String(input.value || "").trim() || DEFAULT_BUNDLE_URL;
+  }
+  input.value = normalized;
+  return normalized;
 }
 
 function setSyncFeedback(message, isError = false) {
@@ -216,6 +227,8 @@ export function initAdminController({ onSyncNow, getSyncStatus, onClearLocalData
   el("adminSourceSelect")?.addEventListener("change", updateSourceUI);
   el("adminBundleUrl")?.addEventListener("blur", () => {
     const value = ensureBundleUrlValue();
+    const input = el("adminBundleUrl");
+    if (input) input.value = value;
     setLastBundleUrl(value);
   });
   el("btnAdminPickBundleFile")?.addEventListener("click", onPickBundleClick);
